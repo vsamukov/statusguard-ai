@@ -1,12 +1,13 @@
-import express, { Request, Response, NextFunction } from 'express';
+
+import express from 'express';
 import { Pool } from 'pg';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
 const app = express();
-// FIX: Casting express.json() to any resolves the TypeScript error where NextHandleFunction is not matched to PathParams.
-app.use(express.json() as any);
+// Using any cast for middleware setup to ensure compatibility across different express versions
+app.use((express.json() as any));
 
 // Database Pool
 const pool = new Pool({
@@ -95,9 +96,7 @@ initDb();
 /**
  * AUTH MIDDLEWARE
  */
-// FIX: Using any for req and res to resolve property existence errors (headers, status) 
-// caused by conflicting or incompatible Express type definitions in the current environment.
-const authenticate = (req: any, res: any, next: NextFunction) => {
+const authenticate = (req: any, res: any, next: any) => {
   const token = req.headers.authorization;
   if (token === `Bearer ${process.env.ADMIN_TOKEN || 'statusguard-admin-token'}`) return next();
   res.status(401).json({ error: 'Unauthorized' });
@@ -107,7 +106,7 @@ const authenticate = (req: any, res: any, next: NextFunction) => {
  * API ROUTES
  */
 
-app.get('/api/status', async (req, res) => {
+app.get('/api/status', async (req: any, res: any) => {
   try {
     const regions = await pool.query('SELECT id, name FROM regions ORDER BY name');
     const services = await pool.query('SELECT id, region_id AS "regionId", name, description FROM services ORDER BY name');
@@ -137,7 +136,7 @@ app.get('/api/status', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', async (req: any, res: any) => {
   const { username, password } = req.body;
   try {
     const result = await pool.query('SELECT password_hash FROM users WHERE username = $1', [username]);
@@ -153,58 +152,58 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/admin/regions', authenticate, async (req, res) => {
+app.post('/api/admin/regions', authenticate, async (req: any, res: any) => {
   const { name } = req.body;
   const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [name]);
   res.json(result.rows[0]);
 });
 
-app.put('/api/admin/regions/:id', authenticate, async (req, res) => {
+app.put('/api/admin/regions/:id', authenticate, async (req: any, res: any) => {
   const { name } = req.body;
   const result = await pool.query('UPDATE regions SET name = $1 WHERE id = $2 RETURNING *', [name, req.params.id]);
   res.json(result.rows[0]);
 });
 
-app.delete('/api/admin/regions/:id', authenticate, async (req, res) => {
+app.delete('/api/admin/regions/:id', authenticate, async (req: any, res: any) => {
   await pool.query('DELETE FROM regions WHERE id = $1', [req.params.id]);
   res.status(204).send();
 });
 
-app.post('/api/admin/services', authenticate, async (req, res) => {
+app.post('/api/admin/services', authenticate, async (req: any, res: any) => {
   const { regionId, name, description } = req.body;
   const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', [regionId, name, description]);
   res.json(result.rows[0]);
 });
 
-app.put('/api/admin/services/:id', authenticate, async (req, res) => {
+app.put('/api/admin/services/:id', authenticate, async (req: any, res: any) => {
   const { name, description } = req.body;
   const result = await pool.query('UPDATE services SET name = $1, description = $2 WHERE id = $3 RETURNING id, region_id AS "regionId", name, description', [name, description, req.params.id]);
   res.json(result.rows[0]);
 });
 
-app.delete('/api/admin/services/:id', authenticate, async (req, res) => {
+app.delete('/api/admin/services/:id', authenticate, async (req: any, res: any) => {
   await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
   res.status(204).send();
 });
 
-app.post('/api/admin/components', authenticate, async (req, res) => {
+app.post('/api/admin/components', authenticate, async (req: any, res: any) => {
   const { serviceId, name, description } = req.body;
   const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description', [serviceId, name, description]);
   res.json(result.rows[0]);
 });
 
-app.put('/api/admin/components/:id', authenticate, async (req, res) => {
+app.put('/api/admin/components/:id', authenticate, async (req: any, res: any) => {
   const { name, description } = req.body;
   const result = await pool.query('UPDATE components SET name = $1, description = $2 WHERE id = $3 RETURNING id, service_id AS "serviceId", name, description', [name, description, req.params.id]);
   res.json(result.rows[0]);
 });
 
-app.delete('/api/admin/components/:id', authenticate, async (req, res) => {
+app.delete('/api/admin/components/:id', authenticate, async (req: any, res: any) => {
   await pool.query('DELETE FROM components WHERE id = $1', [req.params.id]);
   res.status(204).send();
 });
 
-app.post('/api/admin/incidents', authenticate, async (req, res) => {
+app.post('/api/admin/incidents', authenticate, async (req: any, res: any) => {
   const { componentId, title, internalDesc, severity } = req.body;
   try {
     const comp = await pool.query('SELECT name FROM components WHERE id = $1', [componentId]);
@@ -224,7 +223,7 @@ app.post('/api/admin/incidents', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/admin/incidents/:id/resolve', authenticate, async (req, res) => {
+app.post('/api/admin/incidents/:id/resolve', authenticate, async (req: any, res: any) => {
   const result = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [req.params.id]);
   res.json(result.rows[0]);
 });
