@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Severity } from '../types';
+import { Severity } from '../types.ts';
 
 interface UptimeGraphProps {
   componentId: string;

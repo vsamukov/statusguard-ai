@@ -245,15 +245,18 @@ app.post('/api/admin/incidents/:id/resolve', authenticate, async (req: any, res:
 
 /**
  * CATCH-ALL ROUTE FOR FRONTEND
- * This serves index.html for any request that doesn't match an API route or a physical file.
- * Important: We exclude requests that look like file assets (having a dot) to prevent returning HTML for missing JS/TS modules.
+ * We only serve index.html for non-api, non-file requests to support SPA routing.
  */
 app.get('*', (req: any, res: any) => {
-  // If the request is for a file that express.static missed, return 404 instead of index.html
-  if (req.path.includes('.') && !req.path.endsWith('.html')) {
-    return res.status(404).send('File not found');
+  const isApi = req.path.startsWith('/api/');
+  const isFile = req.path.includes('.');
+  
+  if (!isApi && !isFile) {
+    return res.sendFile(path.join(rootPath, 'index.html'));
   }
-  res.sendFile(path.join(rootPath, 'index.html'));
+  
+  // If it's a file that reached here, it means express.static missed it
+  res.status(404).send('Not Found');
 });
 
 const PORT = process.env.PORT || 3000;
