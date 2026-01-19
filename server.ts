@@ -1,4 +1,5 @@
 
+import 'dotenv/config';
 import express from 'express';
 import { Pool } from 'pg';
 import crypto from 'crypto';
@@ -10,8 +11,14 @@ const app = express();
 app.use((express.json() as any));
 
 // Database Pool
+// Ensure DATABASE_URL is defined; fallback to a default if necessary to prevent SCRAM errors
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.warn('WARNING: DATABASE_URL is not defined in environment variables. Falling back to default.');
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connectionString || 'postgresql://postgres:postgres@localhost:5432/statusguard',
 });
 
 /**
@@ -68,26 +75,30 @@ const calculateSLA = async (componentId: string, days = 90) => {
  * DATABASE INITIALIZATION
  */
 const initDb = async () => {
-  const client = await pool.connect();
   try {
-    const schemaFile = path.join(process.cwd(), 'schema.sql');
-    const seedFile = path.join(process.cwd(), 'seed.sql');
+    const client = await pool.connect();
+    try {
+      const schemaFile = path.join(process.cwd(), 'schema.sql');
+      const seedFile = path.join(process.cwd(), 'seed.sql');
 
-    if (fs.existsSync(schemaFile)) {
-      await client.query(fs.readFileSync(schemaFile, 'utf8'));
-      console.log('Schema applied.');
-    }
+      if (fs.existsSync(schemaFile)) {
+        await client.query(fs.readFileSync(schemaFile, 'utf8'));
+        console.log('Schema applied.');
+      }
 
-    // Only seed if empty
-    const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
-    if (rowCount === 0 && fs.existsSync(seedFile)) {
-      await client.query(fs.readFileSync(seedFile, 'utf8'));
-      console.log('Seed data applied.');
+      // Only seed if empty
+      const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
+      if (rowCount === 0 && fs.existsSync(seedFile)) {
+        await client.query(fs.readFileSync(seedFile, 'utf8'));
+        console.log('Seed data applied.');
+      }
+    } catch (err) {
+      console.error('Database Init Error:', err);
+    } finally {
+      client.release();
     }
   } catch (err) {
-    console.error('Database Init Error:', err);
-  } finally {
-    client.release();
+    console.error('Failed to connect to the database during initialization:', err);
   }
 };
 
