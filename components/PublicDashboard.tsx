@@ -23,6 +23,7 @@ const PublicDashboard: React.FC = () => {
   };
 
   const globalStatus = React.useMemo(() => {
+    if (state.components.length === 0) return { label: 'System Initializing', color: 'bg-indigo-500', sub: 'Monitoring is starting up...' };
     const statuses = state.components.map(c => getComponentStatus(c.id));
     if (statuses.includes(Severity.OUTAGE)) return { label: 'System Outage', color: 'bg-red-600', sub: 'Major disruptions are occurring' };
     if (statuses.includes(Severity.DEGRADED)) return { label: 'Partial Degradation', color: 'bg-yellow-500', sub: 'Some services are experiencing issues' };
@@ -31,7 +32,7 @@ const PublicDashboard: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
-      <div className={`${globalStatus.color} rounded-xl p-8 text-white shadow-lg mb-12`}>
+      <div className={`${globalStatus.color} rounded-xl p-8 text-white shadow-lg mb-12 transition-all duration-500`}>
         <h1 className="text-3xl font-bold mb-2">{globalStatus.label}</h1>
         <p className="opacity-90">{globalStatus.sub}</p>
       </div>
@@ -40,11 +41,11 @@ const PublicDashboard: React.FC = () => {
         <div className="mb-12">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            Recent Updates
+            Active Incidents
           </h2>
           <div className="space-y-4">
             {state.incidents.filter(i => !i.endTime).map(incident => (
-              <div key={incident.id} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div key={incident.id} className="bg-white border-l-4 border-red-500 rounded-lg p-6 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-lg">{incident.title}</h3>
                   <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
@@ -97,7 +98,12 @@ const PublicDashboard: React.FC = () => {
                           <div key={comp.id} className="p-6 hover:bg-gray-50 transition-colors">
                             <div className="flex justify-between items-center mb-3">
                               <div>
-                                <h4 className="font-semibold text-gray-800 text-sm">{comp.name}</h4>
+                                <h4 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
+                                  {comp.name}
+                                  <span className="text-[10px] text-gray-400 font-medium bg-gray-100 px-1.5 py-0.5 rounded">
+                                    90D SLA: {comp.sla90 ?? 100}%
+                                  </span>
+                                </h4>
                                 <p className="text-[10px] text-gray-400">{comp.description}</p>
                               </div>
                               <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -111,9 +117,6 @@ const PublicDashboard: React.FC = () => {
                           </div>
                         );
                       })}
-                      {state.components.filter(c => c.serviceId === service.id).length === 0 && (
-                        <div className="p-4 text-center text-xs text-gray-400 italic">No components monitored for this service.</div>
-                      )}
                     </div>
                   </div>
                 );

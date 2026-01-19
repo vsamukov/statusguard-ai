@@ -1,26 +1,18 @@
+
 {
   "name": "statusguard-pro",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
+  "version": "1.0.0",
+  "description": "Enterprise Status Page with SLA tracking",
+  "main": "server.ts",
   "dependencies": {
-    "react-dom": "^19.2.3",
-    "react": "^19.2.3",
-    "crypto": "^1.0.1",
-    "pg": "^8.17.1",
-    "express": "^5.2.1",
-    "fs": "^0.0.1-security",
-    "path": "^0.12.7"
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9",
+    "typescript": "^5.3.2"
   }
 }

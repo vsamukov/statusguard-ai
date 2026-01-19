@@ -107,7 +107,7 @@ const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
                 <input required placeholder="Headline (e.g. Connectivity issues in US-East)" className="w-full border p-2 rounded text-sm font-medium" value={incidentForm.title} onChange={e => setIncidentForm({...incidentForm, title: e.target.value})} />
-                <textarea required placeholder="What's happening internally? (Backend AI will draft public text)" rows={3} className="w-full border p-2 rounded text-sm" value={incidentForm.internalDesc} onChange={e => setIncidentForm({...incidentForm, internalDesc: e.target.value})} />
+                <textarea required placeholder="Public description of the incident and resolution steps" rows={3} className="w-full border p-2 rounded text-sm" value={incidentForm.internalDesc} onChange={e => setIncidentForm({...incidentForm, internalDesc: e.target.value})} />
                 <button disabled={isProcessing} className="w-full py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 shadow-sm disabled:bg-gray-400 transition-colors">
                   {isProcessing ? 'Processing...' : 'Broadcast Update'}
                 </button>

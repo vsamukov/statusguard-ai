@@ -1,8 +1,8 @@
 
 export enum Severity {
   OPERATIONAL = 'OPERATIONAL',
-  DEGRADED = 'DEGRADED', // degradation without loss of availability
-  OUTAGE = 'OUTAGE'      // complete loss of availability
+  DEGRADED = 'DEGRADED',
+  OUTAGE = 'OUTAGE'
 }
 
 export interface Region {
@@ -22,6 +22,7 @@ export interface Component {
   serviceId: string;
   name: string;
   description: string;
+  sla90?: number; // 90-day availability percentage
 }
 
 export interface Incident {
@@ -30,8 +31,8 @@ export interface Incident {
   title: string;
   description: string;
   severity: Severity;
-  startTime: string; // ISO string
-  endTime: string | null; // null if ongoing
+  startTime: string;
+  endTime: string | null;
 }
 
 export interface AppState {
