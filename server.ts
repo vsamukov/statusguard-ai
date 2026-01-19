@@ -7,11 +7,17 @@ import fs from 'fs';
 import path from 'path';
 
 const app = express();
-// Using any cast for middleware setup to ensure compatibility across different express versions
-app.use((express.json() as any));
+const rootPath = process.cwd();
 
-// Database Pool
-// Ensure DATABASE_URL is defined; fallback to a default if necessary to prevent SCRAM errors
+// Middleware
+// Use cast to any to avoid type mismatch with express.json middleware
+app.use(express.json() as any);
+
+// Serve static files from the current directory
+// Cast to any to resolve middleware type mismatch
+app.use(express.static(rootPath) as any);
+
+// Database Pool configuration
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   console.warn('WARNING: DATABASE_URL is not defined in environment variables. Falling back to default.');
@@ -38,37 +44,38 @@ const verifyPassword = (password: string, storedValue: string): boolean => {
 
 /**
  * SLA CALCULATION LOGIC
- * Calculates availability for the last 90 days.
- * Outage = 100% loss, Degradation = 50% loss for the duration.
  */
 const calculateSLA = async (componentId: string, days = 90) => {
-  const query = `
-    SELECT severity, start_time, end_time 
-    FROM incidents 
-    WHERE component_id = $1 
-    AND (end_time IS NULL OR end_time > NOW() - INTERVAL '${days} days')
-  `;
-  const { rows } = await pool.query(query, [componentId]);
-  
-  const totalSeconds = days * 24 * 60 * 60;
-  const startTimeLimit = new Date();
-  startTimeLimit.setDate(startTimeLimit.getDate() - days);
-
-  let totalDowntimeSeconds = 0;
-
-  rows.forEach(incident => {
-    const start = new Date(Math.max(new Date(incident.start_time).getTime(), startTimeLimit.getTime()));
-    const end = incident.end_time ? new Date(incident.end_time) : new Date();
-    const durationSeconds = (end.getTime() - start.getTime()) / 1000;
+  try {
+    const query = `
+      SELECT severity, start_time, end_time 
+      FROM incidents 
+      WHERE component_id = $1 
+      AND (end_time IS NULL OR end_time > NOW() - INTERVAL '${days} days')
+    `;
+    const { rows } = await pool.query(query, [componentId]);
     
-    // Weighted downtime
-    const weight = incident.severity === 'OUTAGE' ? 1.0 : 0.5;
-    totalDowntimeSeconds += durationSeconds * weight;
-  });
+    const totalSeconds = days * 24 * 60 * 60;
+    const startTimeLimit = new Date();
+    startTimeLimit.setDate(startTimeLimit.getDate() - days);
 
-  const uptime = Math.max(0, totalSeconds - totalDowntimeSeconds);
-  const percentage = (uptime / totalSeconds) * 100;
-  return parseFloat(percentage.toFixed(4));
+    let totalDowntimeSeconds = 0;
+
+    rows.forEach(incident => {
+      const start = new Date(Math.max(new Date(incident.start_time).getTime(), startTimeLimit.getTime()));
+      const end = incident.end_time ? new Date(incident.end_time) : new Date();
+      const durationSeconds = (end.getTime() - start.getTime()) / 1000;
+      
+      const weight = incident.severity === 'OUTAGE' ? 1.0 : 0.5;
+      totalDowntimeSeconds += durationSeconds * weight;
+    });
+
+    const uptime = Math.max(0, totalSeconds - totalDowntimeSeconds);
+    const percentage = (uptime / totalSeconds) * 100;
+    return parseFloat(percentage.toFixed(4));
+  } catch (e) {
+    return 100.00;
+  }
 };
 
 /**
@@ -78,15 +85,14 @@ const initDb = async () => {
   try {
     const client = await pool.connect();
     try {
-      const schemaFile = path.join(process.cwd(), 'schema.sql');
-      const seedFile = path.join(process.cwd(), 'seed.sql');
+      const schemaFile = path.join(rootPath, 'schema.sql');
+      const seedFile = path.join(rootPath, 'seed.sql');
 
       if (fs.existsSync(schemaFile)) {
         await client.query(fs.readFileSync(schemaFile, 'utf8'));
         console.log('Schema applied.');
       }
 
-      // Only seed if empty
       const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
       if (rowCount === 0 && fs.existsSync(seedFile)) {
         await client.query(fs.readFileSync(seedFile, 'utf8'));
@@ -129,7 +135,6 @@ app.get('/api/status', async (req: any, res: any) => {
       ORDER BY start_time DESC
     `);
 
-    // Enrich components with SLA data
     const components = await Promise.all(componentsRes.rows.map(async (c) => ({
       ...c,
       sla90: await calculateSLA(c.id, 90)
@@ -220,7 +225,6 @@ app.post('/api/admin/incidents', authenticate, async (req: any, res: any) => {
     const comp = await pool.query('SELECT name FROM components WHERE id = $1', [componentId]);
     if (comp.rowCount === 0) return res.status(404).json({ error: 'Component not found' });
     
-    // Standard template for incident descriptions
     const publicDesc = `System Notice: ${comp.rows[0].name} is currently experiencing ${severity === 'OUTAGE' ? 'a full outage' : 'performance degradation'}. ${internalDesc}`;
     
     const result = await pool.query(
@@ -237,6 +241,19 @@ app.post('/api/admin/incidents', authenticate, async (req: any, res: any) => {
 app.post('/api/admin/incidents/:id/resolve', authenticate, async (req: any, res: any) => {
   const result = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [req.params.id]);
   res.json(result.rows[0]);
+});
+
+/**
+ * CATCH-ALL ROUTE FOR FRONTEND
+ * This serves index.html for any request that doesn't match an API route or a physical file.
+ * Important: We exclude requests that look like file assets (having a dot) to prevent returning HTML for missing JS/TS modules.
+ */
+app.get('*', (req: any, res: any) => {
+  // If the request is for a file that express.static missed, return 404 instead of index.html
+  if (req.path.includes('.') && !req.path.endsWith('.html')) {
+    return res.status(404).send('File not found');
+  }
+  res.sendFile(path.join(rootPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;

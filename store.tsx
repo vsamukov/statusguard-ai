@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppState, Region, Service, Component, Incident, Severity } from './types';
-import { api } from './services/api';
+import { AppState, Severity } from './types.ts';
+import { api } from './services/api.ts';
 
 interface AppContextType {
   state: AppState;

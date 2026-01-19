@@ -1,8 +1,8 @@
 
 import React from 'react';
-import { useApp } from '../store';
-import { Severity } from '../types';
-import UptimeGraph from './UptimeGraph';
+import { useApp } from '../store.tsx';
+import { Severity } from '../types.ts';
+import UptimeGraph from './UptimeGraph.tsx';
 
 const PublicDashboard: React.FC = () => {
   const { state } = useApp();

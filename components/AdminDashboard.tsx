@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { useApp } from '../store';
-import { Severity, Region, Service, Component } from '../types';
+import { useApp } from '../store.tsx';
+import { Severity } from '../types.ts';
 
 const AdminDashboard: React.FC = () => {
   const { 

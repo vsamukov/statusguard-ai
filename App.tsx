@@ -1,8 +1,8 @@
 
 import React from 'react';
-import { AppProvider, useApp } from './store';
-import PublicDashboard from './components/PublicDashboard';
-import AdminDashboard from './components/AdminDashboard';
+import { AppProvider, useApp } from './store.tsx';
+import PublicDashboard from './components/PublicDashboard.tsx';
+import AdminDashboard from './components/AdminDashboard.tsx';
 
 const AppContent: React.FC = () => {
   const { state, isLoading, login } = useApp();
