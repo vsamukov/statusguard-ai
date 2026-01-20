@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../store.tsx';
 import { Severity } from '../types.ts';
@@ -145,7 +146,7 @@ const AdminDashboard: React.FC = () => {
                         const components = state.components.filter(c => c.serviceId === service.id);
                         if (components.length === 0) return null;
                         return (
-                          <optgroup key={`opt-${service.id}`} label={`${region?.name || 'Global'} > ${service.name}`}>
+                          <optgroup key={`opt-reporting-${service.id}`} label={`${region?.name || 'Global'} > ${service.name}`}>
                             {components.map(c => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
