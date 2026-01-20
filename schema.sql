@@ -1,4 +1,3 @@
-
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -28,7 +27,7 @@ CREATE TABLE IF NOT EXISTS services (
 
 -- Components table
 CREATE TABLE IF NOT EXISTS components (
-    id PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     service_id UUID REFERENCES services(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
