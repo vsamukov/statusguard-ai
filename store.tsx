@@ -108,10 +108,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const login = async (credentials: any) => {
-    const { token } = await api.login(credentials);
-    localStorage.setItem('statusguard_token', token);
-    setState(prev => ({ ...prev, isAuthenticated: true }));
-    fetchData();
+    try {
+      const { token } = await api.login(credentials);
+      localStorage.setItem('statusguard_token', token);
+      setState(prev => ({ ...prev, isAuthenticated: true }));
+      await fetchData();
+    } catch (err: any) {
+      // Re-throw so component can handle UI error message
+      throw err;
+    }
   };
 
   const logout = () => {

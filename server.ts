@@ -24,8 +24,8 @@ const hashPassword = (password: string): string => {
 
 const verifyPassword = (password: string, storedValue: string): boolean => {
   try {
+    if (!storedValue || !storedValue.includes(':')) return false;
     const [salt, hash] = storedValue.split(':');
-    if (!salt || !hash) return false;
     const derivedHash = crypto.scryptSync(password, salt, 64).toString('hex');
     return derivedHash === hash;
   } catch (e) {
@@ -44,7 +44,7 @@ app.use(async (req, res, next) => {
     try {
       const content = fs.readFileSync(filePath, 'utf8');
       const result = await esbuild.transform(content, {
-        loader: 'tsx', // Handles both .ts and .tsx safely
+        loader: 'tsx',
         format: 'esm',
         target: 'es2020',
         sourcemap: 'inline'
@@ -61,10 +61,8 @@ app.use(async (req, res, next) => {
   }
 });
 
-// Serve other static files
 app.use(express.static(rootPath) as any);
 
-// Database Pool
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({
   connectionString: connectionString || 'postgresql://postgres:postgres@localhost:5432/statusguard',
@@ -84,13 +82,17 @@ const initDb = async () => {
         await client.query(fs.readFileSync(schemaFile, 'utf8'));
       }
 
-      // Ensure Admin User Exists with correct hash
-      const userCheck = await client.query('SELECT 1 FROM users WHERE username = $1', ['admin']);
-      if (userCheck.rowCount === 0) {
-        const pass = process.env.ADMIN_PASS || 'password';
+      // Forcefully ensure Admin User has a valid hash (fixes 401 from legacy seeds)
+      const pass = process.env.ADMIN_PASS || 'password';
+      const userRes = await client.query('SELECT password_hash FROM users WHERE username = $1', ['admin']);
+      
+      if (userRes.rowCount === 0 || !userRes.rows[0].password_hash.includes(':')) {
         const hashed = hashPassword(pass);
-        await client.query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', ['admin', hashed]);
-        console.log('[STATUSGUARD] Created default admin user');
+        await client.query(
+          'INSERT INTO users (username, password_hash) VALUES ($1, $2) ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash', 
+          ['admin', hashed]
+        );
+        console.log('[STATUSGUARD] Admin user hash updated/created');
       }
 
       const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
@@ -107,9 +109,6 @@ const initDb = async () => {
 
 initDb();
 
-/**
- * SLA CALCULATION
- */
 const calculateSLA = async (componentId: string, days = 90) => {
   try {
     const query = `
@@ -138,18 +137,12 @@ const calculateSLA = async (componentId: string, days = 90) => {
   }
 };
 
-/**
- * AUTH MIDDLEWARE
- */
 const authenticate = (req: any, res: any, next: any) => {
   const token = req.headers.authorization;
   if (token === `Bearer ${process.env.ADMIN_TOKEN || 'statusguard-admin-token'}`) return next();
   res.status(401).json({ error: 'Unauthorized' });
 };
 
-/**
- * API ROUTES
- */
 app.get('/api/status', async (req: any, res: any) => {
   try {
     const [regions, services, componentsRes, incidents] = await Promise.all([
@@ -186,7 +179,6 @@ app.post('/api/auth/login', async (req: any, res: any) => {
   }
 });
 
-// Admin endpoints (simplified for brevity, ensuring they use 'authenticate')
 app.post('/api/admin/regions', authenticate, async (req: any, res: any) => {
   const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
   res.json(result.rows[0]);
