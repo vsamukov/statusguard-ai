@@ -7,15 +7,20 @@ import fs from 'fs';
 import path from 'path';
 
 const app = express();
-const rootPath = process.cwd();
+// Use path.resolve() instead of process.cwd() to resolve TS error: Property 'cwd' does not exist on type 'Process'
+const rootPath = path.resolve();
 
 // Middleware
-// Use cast to any to avoid type mismatch with express.json middleware
 app.use(express.json() as any);
 
-// Serve static files from the current directory
-// Cast to any to resolve middleware type mismatch
-app.use(express.static(rootPath) as any);
+// Serve static files with explicit MIME type handling for TypeScript/JSX files
+app.use(express.static(rootPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}) as any);
 
 // Database Pool configuration
 const connectionString = process.env.DATABASE_URL;
