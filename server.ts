@@ -34,8 +34,6 @@ const verifyPassword = (password: string, storedValue: string): boolean => {
 
 /**
  * TRANSPILATION MIDDLEWARE
- * Converts TSX to JS on the fly for the browser.
- * Injects process.env.API_KEY so the browser can use the Gemini API.
  */
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
@@ -69,7 +67,7 @@ app.use(express.static(rootPath) as any);
 
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({
-  connectionString: connectionString || 'postgresql://postgres:postgres@localhost:5432/statusguard',
+  connectionString: connectionString || 'postgresql://postgres:postgres@localhost:5432/voximplant_status',
 });
 
 /**
@@ -78,26 +76,31 @@ const pool = new Pool({
 const initDb = async () => {
   try {
     const client = await pool.connect();
-    console.log('[STATUSGUARD] Connected to PostgreSQL');
+    console.log('[VOXIMPLANT] Connected to PostgreSQL');
     try {
       const schemaFile = path.join(rootPath, 'schema.sql');
       if (fs.existsSync(schemaFile)) {
         await client.query(fs.readFileSync(schemaFile, 'utf8'));
       }
 
-      // Handle migrations: ensure created_at exists
+      // Migrations for existing DBs
       await client.query(`
         DO $$ 
         BEGIN 
-          BEGIN
-            ALTER TABLE components ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
-          EXCEPTION WHEN duplicate_column THEN 
-            -- do nothing
-          END;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'audit_logs') THEN
+            CREATE TABLE audit_logs (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              username TEXT NOT NULL,
+              action_type TEXT NOT NULL,
+              target_type TEXT NOT NULL,
+              target_name TEXT,
+              details JSONB,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+          END IF;
         END $$;
       `);
 
-      // FORCE RESET ADMIN PASSWORD ON STARTUP
       const adminUsername = process.env.ADMIN_USER || 'admin';
       const adminPassword = process.env.ADMIN_PASS || 'password';
       const hashed = hashPassword(adminPassword);
@@ -106,29 +109,46 @@ const initDb = async () => {
         'INSERT INTO users (username, password_hash) VALUES ($1, $2) ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash', 
         [adminUsername, hashed]
       );
-      console.log(`[STATUSGUARD] Admin user '${adminUsername}' synchronized.`);
 
       const seedFile = path.join(rootPath, 'seed.sql');
       const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
       if (rowCount === 0 && fs.existsSync(seedFile)) {
         await client.query(fs.readFileSync(seedFile, 'utf8'));
-        console.log('[STATUSGUARD] Seed data applied');
       }
     } finally {
       client.release();
     }
   } catch (err) {
-    console.error('[STATUSGUARD] Database Init Error:', err);
+    console.error('[VOXIMPLANT] Database Init Error:', err);
   }
 };
 
 initDb();
 
+// Map tokens to usernames for simple session management
+const sessions = new Map<string, string>();
+
 const authenticate = (req: any, res: any, next: any) => {
-  const token = req.headers.authorization;
-  const expectedToken = `Bearer ${process.env.ADMIN_TOKEN || 'statusguard-admin-token'}`;
-  if (token === expectedToken) return next();
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+  const token = authHeader.split(' ')[1];
+  
+  if (sessions.has(token)) {
+    req.username = sessions.get(token);
+    return next();
+  }
   res.status(401).json({ error: 'Unauthorized' });
+};
+
+const auditLog = async (username: string, actionType: string, targetType: string, targetName: string, details?: any) => {
+  try {
+    await pool.query(
+      'INSERT INTO audit_logs (username, action_type, target_type, target_name, details) VALUES ($1, $2, $3, $4, $5)',
+      [username, actionType, targetType, targetName, details ? JSON.stringify(details) : null]
+    );
+  } catch (err) {
+    console.error('[AUDIT] Failed to log action:', err);
+  }
 };
 
 /**
@@ -141,7 +161,9 @@ app.post('/api/auth/login', async (req: any, res: any) => {
     if (result.rowCount === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
     if (verifyPassword(password, result.rows[0].password_hash)) {
-      res.json({ token: process.env.ADMIN_TOKEN || 'statusguard-admin-token' });
+      const token = crypto.randomBytes(32).toString('hex');
+      sessions.set(token, username);
+      res.json({ token, username });
     } else {
       res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -170,64 +192,91 @@ app.get('/api/status', async (req: any, res: any) => {
   }
 });
 
-// Admin Routes
-app.post('/api/admin/regions', authenticate, async (req: any, res: any) => {
-  const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
-  res.json(result.rows[0]);
+// Admin Core
+app.get('/api/admin/data', authenticate, async (req: any, res: any) => {
+  const [users, auditLogs] = await Promise.all([
+    pool.query('SELECT id, username, created_at AS "createdAt" FROM users ORDER BY created_at DESC'),
+    pool.query('SELECT id, username, action_type AS "actionType", target_type AS "targetType", target_name AS "targetName", details, created_at AS "createdAt" FROM audit_logs ORDER BY created_at DESC LIMIT 100')
+  ]);
+  res.json({ users: users.rows, auditLogs: auditLogs.rows });
 });
 
-app.put('/api/admin/regions/:id', authenticate, async (req: any, res: any) => {
-  const result = await pool.query('UPDATE regions SET name = $1 WHERE id = $2 RETURNING *', [req.body.name, req.params.id]);
+// User Management
+app.post('/api/admin/users', authenticate, async (req: any, res: any) => {
+  const { username, password } = req.body;
+  const hashed = hashPassword(password);
+  try {
+    const result = await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, created_at AS "createdAt"', [username, hashed]);
+    await auditLog(req.username, 'CREATE_USER', 'USER', username);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(400).json({ error: 'User already exists' });
+  }
+});
+
+app.delete('/api/admin/users/:id', authenticate, async (req: any, res: any) => {
+  const user = await pool.query('SELECT username FROM users WHERE id = $1', [req.params.id]);
+  if (user.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  if (user.rows[0].username === req.username) return res.status(400).json({ error: 'Cannot delete self' });
+
+  await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+  await auditLog(req.username, 'DELETE_USER', 'USER', user.rows[0].username);
+  res.json({ success: true });
+});
+
+// Infrastructure Admin
+app.post('/api/admin/regions', authenticate, async (req: any, res: any) => {
+  const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
+  await auditLog(req.username, 'CREATE_REGION', 'REGION', req.body.name);
   res.json(result.rows[0]);
 });
 
 app.delete('/api/admin/regions/:id', authenticate, async (req: any, res: any) => {
+  const target = await pool.query('SELECT name FROM regions WHERE id = $1', [req.params.id]);
   await pool.query('DELETE FROM regions WHERE id = $1', [req.params.id]);
+  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_REGION', 'REGION', target.rows[0].name);
   res.json({ success: true });
 });
 
 app.post('/api/admin/services', authenticate, async (req: any, res: any) => {
   const { regionId, name, description } = req.body;
   const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', [regionId, name, description]);
-  res.json(result.rows[0]);
-});
-
-app.put('/api/admin/services/:id', authenticate, async (req: any, res: any) => {
-  const { name, description } = req.body;
-  const result = await pool.query('UPDATE services SET name = $1, description = $2 WHERE id = $3 RETURNING id, region_id AS "regionId", name, description', [name, description, req.params.id]);
+  await auditLog(req.username, 'CREATE_SERVICE', 'SERVICE', name);
   res.json(result.rows[0]);
 });
 
 app.delete('/api/admin/services/:id', authenticate, async (req: any, res: any) => {
+  const target = await pool.query('SELECT name FROM services WHERE id = $1', [req.params.id]);
   await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
+  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_SERVICE', 'SERVICE', target.rows[0].name);
   res.json({ success: true });
 });
 
 app.post('/api/admin/components', authenticate, async (req: any, res: any) => {
   const { serviceId, name, description } = req.body;
   const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [serviceId, name, description]);
-  res.json(result.rows[0]);
-});
-
-app.put('/api/admin/components/:id', authenticate, async (req: any, res: any) => {
-  const { name, description } = req.body;
-  const result = await pool.query('UPDATE components SET name = $1, description = $2 WHERE id = $3 RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [name, description, req.params.id]);
+  await auditLog(req.username, 'CREATE_COMPONENT', 'COMPONENT', name);
   res.json(result.rows[0]);
 });
 
 app.delete('/api/admin/components/:id', authenticate, async (req: any, res: any) => {
+  const target = await pool.query('SELECT name FROM components WHERE id = $1', [req.params.id]);
   await pool.query('DELETE FROM components WHERE id = $1', [req.params.id]);
+  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_COMPONENT', 'COMPONENT', target.rows[0].name);
   res.json({ success: true });
 });
 
 app.post('/api/admin/incidents', authenticate, async (req: any, res: any) => {
   const { componentId, title, internalDesc, severity } = req.body;
   const result = await pool.query('INSERT INTO incidents (component_id, title, description, severity) VALUES ($1, $2, $3, $4) RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [componentId, title, internalDesc, severity]);
+  await auditLog(req.username, 'REPORT_INCIDENT', 'INCIDENT', title, { severity });
   res.json(result.rows[0]);
 });
 
 app.post('/api/admin/incidents/:id/resolve', authenticate, async (req: any, res: any) => {
+  const target = await pool.query('SELECT title FROM incidents WHERE id = $1', [req.params.id]);
   const result = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [req.params.id]);
+  if (target.rowCount > 0) await auditLog(req.username, 'RESOLVE_INCIDENT', 'INCIDENT', target.rows[0].title);
   res.json(result.rows[0]);
 });
 
@@ -239,4 +288,4 @@ app.get('*', (req: any, res: any) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`[STATUSGUARD] Online at http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`[VOXIMPLANT] Online at http://localhost:${PORT}`));

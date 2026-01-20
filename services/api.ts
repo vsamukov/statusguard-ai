@@ -1,13 +1,15 @@
 
 const API_BASE = '/api';
 
+const TOKEN_KEY = 'voximplant_status_token';
+
 const getHeaders = (skipAuth = false) => {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
   
   if (!skipAuth) {
-    const token = localStorage.getItem('statusguard_token');
+    const token = localStorage.getItem(TOKEN_KEY);
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -24,7 +26,6 @@ export const api = {
   },
 
   async login(credentials: any) {
-    // We explicitly don't send existing tokens during the login request itself
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -39,6 +40,31 @@ export const api = {
     return res.json();
   },
 
+  async getAdminData() {
+    const res = await fetch(`${API_BASE}/admin/data`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch admin data');
+    return res.json();
+  },
+
+  async createUser(user: any) {
+    const res = await fetch(`${API_BASE}/admin/users`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(user),
+    });
+    if (!res.ok) throw new Error('Failed to create user');
+    return res.json();
+  },
+
+  async deleteUser(id: string) {
+    const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete user');
+    return res.json();
+  },
+
   async createRegion(name: string) {
     const res = await fetch(`${API_BASE}/admin/regions`, {
       method: 'POST',
@@ -49,7 +75,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added updateRegion method to resolve store.tsx error on line 58
   async updateRegion(id: string, name: string) {
     const res = await fetch(`${API_BASE}/admin/regions/${id}`, {
       method: 'PUT',
@@ -60,7 +85,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added deleteRegion method to resolve store.tsx error on line 63
   async deleteRegion(id: string) {
     const res = await fetch(`${API_BASE}/admin/regions/${id}`, {
       method: 'DELETE',
@@ -70,7 +94,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added createService method to resolve store.tsx error on line 68
   async createService(regionId: string, name: string, description: string) {
     const res = await fetch(`${API_BASE}/admin/services`, {
       method: 'POST',
@@ -81,7 +104,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added updateService method to resolve store.tsx error on line 73
   async updateService(id: string, name: string, description: string) {
     const res = await fetch(`${API_BASE}/admin/services/${id}`, {
       method: 'PUT',
@@ -92,7 +114,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added deleteService method to resolve store.tsx error on line 78
   async deleteService(id: string) {
     const res = await fetch(`${API_BASE}/admin/services/${id}`, {
       method: 'DELETE',
@@ -102,7 +123,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added createComponent method to resolve store.tsx error on line 83
   async createComponent(serviceId: string, name: string, description: string) {
     const res = await fetch(`${API_BASE}/admin/components`, {
       method: 'POST',
@@ -113,7 +133,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added updateComponent method to resolve store.tsx error on line 88
   async updateComponent(id: string, name: string, description: string) {
     const res = await fetch(`${API_BASE}/admin/components/${id}`, {
       method: 'PUT',
@@ -124,7 +143,6 @@ export const api = {
     return res.json();
   },
 
-  // Fix: Added deleteComponent method to resolve store.tsx error on line 93
   async deleteComponent(id: string) {
     const res = await fetch(`${API_BASE}/admin/components/${id}`, {
       method: 'DELETE',

@@ -36,10 +36,29 @@ export interface Incident {
   endTime: string | null;
 }
 
+export interface AdminUser {
+  id: string;
+  username: string;
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  username: string;
+  actionType: string;
+  targetType: string;
+  targetName: string;
+  details: any;
+  createdAt: string;
+}
+
 export interface AppState {
   regions: Region[];
   services: Service[];
   components: Component[];
   incidents: Incident[];
+  users: AdminUser[];
+  auditLogs: AuditLog[];
   isAuthenticated: boolean;
+  currentUser?: string;
 }

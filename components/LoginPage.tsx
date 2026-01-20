@@ -37,7 +37,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onCancel }) => {
             </svg>
           </div>
           <h2 className="text-2xl font-bold">Admin Portal</h2>
-          <p className="text-indigo-100 text-sm mt-1">Secure access to Infrastructure Manager</p>
+          <p className="text-indigo-100 text-sm mt-1">Secure access to Voximplant Infrastructure Manager</p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
@@ -94,7 +94,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onCancel }) => {
 
         <div className="px-8 pb-8 text-center">
           <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-            Protected by StatusGuard Security
+            Protected by Voximplant Security
           </p>
         </div>
       </div>

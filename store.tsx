@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppState, Severity } from './types.ts';
+import { AppState, Severity, AdminUser, AuditLog } from './types.ts';
 import { api } from './services/api.ts';
 
 interface AppContextType {
@@ -17,11 +17,17 @@ interface AppContextType {
   removeComponent: (id: string) => Promise<void>;
   reportIncident: (incident: { componentId: string, title: string, internalDesc: string, severity: Severity }) => Promise<void>;
   resolveIncident: (incidentId: string) => Promise<void>;
+  createAdmin: (user: any) => Promise<void>;
+  deleteAdmin: (id: string) => Promise<void>;
   login: (credentials: any) => Promise<void>;
   logout: () => void;
+  fetchAdminData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const TOKEN_KEY = 'voximplant_status_token';
+const USER_KEY = 'voximplant_status_user';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>({
@@ -29,7 +35,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     services: [],
     components: [],
     incidents: [],
-    isAuthenticated: !!localStorage.getItem('statusguard_token'),
+    users: [],
+    auditLogs: [],
+    isAuthenticated: !!localStorage.getItem(TOKEN_KEY),
+    currentUser: localStorage.getItem(USER_KEY) || undefined,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,90 +54,117 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  const fetchAdminData = useCallback(async () => {
+    if (!state.isAuthenticated) return;
+    try {
+      const data = await api.getAdminData();
+      setState(prev => ({ ...prev, ...data }));
+    } catch (err) {
+      console.error("Failed to fetch admin info", err);
+    }
+  }, [state.isAuthenticated]);
+
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    if (state.isAuthenticated) fetchAdminData();
+  }, [fetchData, fetchAdminData, state.isAuthenticated]);
 
   const addRegion = async (name: string) => {
-    const region = await api.createRegion(name);
-    setState(prev => ({ ...prev, regions: [...prev.regions, region] }));
+    await api.createRegion(name);
+    fetchData();
+    fetchAdminData();
   };
 
   const updateRegion = async (id: string, name: string) => {
-    const region = await api.updateRegion(id, name);
-    setState(prev => ({ ...prev, regions: prev.regions.map(r => r.id === id ? region : r) }));
+    await api.updateRegion(id, name);
+    fetchData();
+    fetchAdminData();
   };
 
   const removeRegion = async (id: string) => {
     await api.deleteRegion(id);
     fetchData();
+    fetchAdminData();
   };
 
   const addService = async (regionId: string, name: string, description: string) => {
-    const service = await api.createService(regionId, name, description);
-    setState(prev => ({ ...prev, services: [...prev.services, service] }));
+    await api.createService(regionId, name, description);
+    fetchData();
+    fetchAdminData();
   };
 
   const updateService = async (id: string, name: string, description: string) => {
-    const service = await api.updateService(id, name, description);
-    setState(prev => ({ ...prev, services: prev.services.map(s => s.id === id ? service : s) }));
+    await api.updateService(id, name, description);
+    fetchData();
+    fetchAdminData();
   };
 
   const removeService = async (id: string) => {
     await api.deleteService(id);
     fetchData();
+    fetchAdminData();
   };
 
   const addComponent = async (serviceId: string, name: string, description: string) => {
-    const component = await api.createComponent(serviceId, name, description);
-    setState(prev => ({ ...prev, components: [...prev.components, component] }));
+    await api.createComponent(serviceId, name, description);
+    fetchData();
+    fetchAdminData();
   };
 
   const updateComponent = async (id: string, name: string, description: string) => {
-    const component = await api.updateComponent(id, name, description);
-    setState(prev => ({ ...prev, components: prev.components.map(c => c.id === id ? component : c) }));
+    await api.updateComponent(id, name, description);
+    fetchData();
+    fetchAdminData();
   };
 
   const removeComponent = async (id: string) => {
     await api.deleteComponent(id);
     fetchData();
+    fetchAdminData();
   };
 
   const reportIncident = async (incident: any) => {
-    const created = await api.createIncident(incident);
-    setState(prev => ({ ...prev, incidents: [...prev.incidents, created] }));
+    await api.createIncident(incident);
+    fetchData();
+    fetchAdminData();
   };
 
   const resolveIncident = async (id: string) => {
-    const updated = await api.resolveIncident(id);
-    setState(prev => ({
-      ...prev,
-      incidents: prev.incidents.map(i => i.id === id ? updated : i)
-    }));
+    await api.resolveIncident(id);
+    fetchData();
+    fetchAdminData();
+  };
+
+  const createAdmin = async (user: any) => {
+    await api.createUser(user);
+    fetchAdminData();
+  };
+
+  const deleteAdmin = async (id: string) => {
+    await api.deleteUser(id);
+    fetchAdminData();
   };
 
   const login = async (credentials: any) => {
-    try {
-      const { token } = await api.login(credentials);
-      localStorage.setItem('statusguard_token', token);
-      setState(prev => ({ ...prev, isAuthenticated: true }));
-      await fetchData();
-    } catch (err: any) {
-      // Re-throw so component can handle UI error message
-      throw err;
-    }
+    const { token, username } = await api.login(credentials);
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, username);
+    setState(prev => ({ ...prev, isAuthenticated: true, currentUser: username }));
+    fetchData();
+    fetchAdminData();
   };
 
   const logout = () => {
-    localStorage.removeItem('statusguard_token');
-    setState(prev => ({ ...prev, isAuthenticated: false }));
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setState(prev => ({ ...prev, isAuthenticated: false, currentUser: undefined }));
   };
 
   return (
     <AppContext.Provider value={{
       state, isLoading, addRegion, updateRegion, removeRegion, addService, 
       updateService, removeService, addComponent, updateComponent, removeComponent,
-      reportIncident, resolveIncident, login, logout
+      reportIncident, resolveIncident, createAdmin, deleteAdmin, login, logout, fetchAdminData
     }}>
       {children}
     </AppContext.Provider>
