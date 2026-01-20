@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './store.tsx';
 import PublicDashboard from './components/PublicDashboard.tsx';
 import AdminDashboard from './components/AdminDashboard.tsx';
@@ -8,6 +8,14 @@ import LoginPage from './components/LoginPage.tsx';
 const AppContent: React.FC = () => {
   const { state, isLoading } = useApp();
   const [showLogin, setShowLogin] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(true);
+
+  // Reset to admin mode if authentication state changes to true
+  useEffect(() => {
+    if (state.isAuthenticated) {
+      setIsAdminMode(true);
+    }
+  }, [state.isAuthenticated]);
 
   if (isLoading) {
     return (
@@ -18,10 +26,28 @@ const AppContent: React.FC = () => {
     );
   }
 
+  const showAdminView = state.isAuthenticated && isAdminMode;
+
   return (
     <div className="min-h-screen">
+      {/* Admin Preview Banner */}
+      {state.isAuthenticated && !isAdminMode && (
+        <div className="bg-indigo-900 text-white py-2 px-4 flex justify-center items-center gap-4 text-xs font-bold sticky top-0 z-[60] shadow-md border-b border-indigo-800">
+          <span className="flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+            PREVIEW MODE: Viewing public status page
+          </span>
+          <button 
+            onClick={() => setIsAdminMode(true)}
+            className="bg-white text-indigo-900 px-3 py-1 rounded hover:bg-indigo-50 transition-colors"
+          >
+            Return to Manager
+          </button>
+        </div>
+      )}
+
       {/* Simple Navigation Bar */}
-      <nav className="bg-white border-b border-gray-200 h-16 flex items-center shadow-sm sticky top-0 z-50">
+      <nav className={`bg-white border-b border-gray-200 h-16 flex items-center shadow-sm sticky ${state.isAuthenticated && !isAdminMode ? 'top-8' : 'top-0'} z-50`}>
         <div className="max-w-6xl mx-auto px-4 w-full flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md">
@@ -34,7 +60,11 @@ const AppContent: React.FC = () => {
           
           <div className="flex gap-6 items-center">
             {state.isAuthenticated ? (
-               <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-tighter">Admin Mode</span>
+               <div className="flex items-center gap-3">
+                 <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-tighter">
+                   {isAdminMode ? 'Admin Portal' : 'Previewing'}
+                 </span>
+               </div>
             ) : (
               <button 
                 onClick={() => setShowLogin(true)}
@@ -49,7 +79,11 @@ const AppContent: React.FC = () => {
 
       {/* View Logic */}
       <main className="animate-in fade-in duration-500">
-        {state.isAuthenticated ? <AdminDashboard /> : <PublicDashboard />}
+        {showAdminView ? (
+          <AdminDashboard onViewPublic={() => setIsAdminMode(false)} />
+        ) : (
+          <PublicDashboard />
+        )}
       </main>
 
       {/* Login Overlay */}

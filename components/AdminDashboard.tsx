@@ -4,7 +4,11 @@ import { useApp } from '../store.tsx';
 import { Severity } from '../types.ts';
 import { geminiService } from '../services/geminiService.ts';
 
-const AdminDashboard: React.FC = () => {
+interface AdminDashboardProps {
+  onViewPublic?: () => void;
+}
+
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   const { 
     state, 
     addRegion, updateRegion, removeRegion,
@@ -85,7 +89,7 @@ const AdminDashboard: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Infrastructure Manager</h1>
           <p className="text-sm text-gray-500">Control center for service status and regional health.</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-4">
           <nav className="flex bg-gray-100 p-1 rounded-lg">
             <button 
               onClick={() => setActiveTab('reporting')}
@@ -100,7 +104,19 @@ const AdminDashboard: React.FC = () => {
               Configuration
             </button>
           </nav>
-          <button onClick={logout} className="px-4 py-1.5 text-sm font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors">Logout</button>
+          
+          <div className="h-6 w-px bg-gray-200"></div>
+
+          <div className="flex gap-2">
+            <button 
+              onClick={onViewPublic}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+              View Live Page
+            </button>
+            <button onClick={logout} className="px-3 py-1.5 text-sm font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors">Logout</button>
+          </div>
         </div>
       </div>
 
