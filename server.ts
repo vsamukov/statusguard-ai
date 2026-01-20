@@ -5,29 +5,48 @@ import { Pool } from 'pg';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import * as esbuild from 'esbuild';
 
 const app = express();
-// Use path.resolve() instead of process.cwd() to resolve TS error: Property 'cwd' does not exist on type 'Process'
 const rootPath = path.resolve();
 
 // Middleware
 app.use(express.json() as any);
 
-// Serve static files with explicit MIME type handling for TypeScript/JSX files
-app.use(express.static(rootPath, {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    }
+/**
+ * ON-THE-FLY TRANSPILATION MIDDLEWARE
+ * Converts TypeScript and JSX into browser-runnable JavaScript modules.
+ * This resolves the 'Unexpected token <' error by converting JSX to JS.
+ */
+app.get(['/*.ts', '/*.tsx'], async (req, res, next) => {
+  const filePath = path.join(rootPath, req.path);
+  
+  if (!fs.existsSync(filePath)) {
+    return next();
   }
-}) as any);
+
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const result = await esbuild.transform(content, {
+      loader: req.path.endsWith('x') ? 'tsx' : 'ts',
+      format: 'esm',
+      target: 'es2020',
+      sourcemap: 'inline'
+    });
+
+    res.type('application/javascript');
+    res.send(result.code);
+  } catch (err) {
+    console.error(`Transpilation error for ${req.path}:`, err);
+    res.status(500).send(`console.error("Transpilation failed for ${req.path}");`);
+  }
+});
+
+// Serve other static files (images, css, html)
+app.use(express.static(rootPath) as any);
 
 // Database Pool configuration
 const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  console.warn('WARNING: DATABASE_URL is not defined in environment variables. Falling back to default.');
-}
-
 const pool = new Pool({
   connectionString: connectionString || 'postgresql://postgres:postgres@localhost:5432/statusguard',
 });
@@ -35,16 +54,14 @@ const pool = new Pool({
 /**
  * PRODUCTION-READY SECURITY
  */
-const hashPassword = (password: string): string => {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `${salt}:${hash}`;
-};
-
 const verifyPassword = (password: string, storedValue: string): boolean => {
-  const [salt, hash] = storedValue.split(':');
-  const derivedHash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return derivedHash === hash;
+  try {
+    const [salt, hash] = storedValue.split(':');
+    const derivedHash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return derivedHash === hash;
+  } catch (e) {
+    return false;
+  }
 };
 
 /**
@@ -95,16 +112,12 @@ const initDb = async () => {
 
       if (fs.existsSync(schemaFile)) {
         await client.query(fs.readFileSync(schemaFile, 'utf8'));
-        console.log('Schema applied.');
       }
 
       const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
       if (rowCount === 0 && fs.existsSync(seedFile)) {
         await client.query(fs.readFileSync(seedFile, 'utf8'));
-        console.log('Seed data applied.');
       }
-    } catch (err) {
-      console.error('Database Init Error:', err);
     } finally {
       client.release();
     }
@@ -259,10 +272,8 @@ app.get('*', (req: any, res: any) => {
   if (!isApi && !isFile) {
     return res.sendFile(path.join(rootPath, 'index.html'));
   }
-  
-  // If it's a file that reached here, it means express.static missed it
   res.status(404).send('Not Found');
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`[STATUSGUARD] Node.js Backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`[STATUSGUARD] Node.js Backend with esbuild-transpiler running on port ${PORT}`));
