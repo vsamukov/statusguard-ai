@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- Regions table
 CREATE TABLE IF NOT EXISTS regions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL
+    name TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Services table
@@ -21,15 +22,17 @@ CREATE TABLE IF NOT EXISTS services (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     region_id UUID REFERENCES regions(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Components table
 CREATE TABLE IF NOT EXISTS components (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id PRIMARY KEY DEFAULT gen_random_uuid(),
     service_id UUID REFERENCES services(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Incidents table

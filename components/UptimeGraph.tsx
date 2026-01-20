@@ -1,32 +1,80 @@
 
 import React, { useState } from 'react';
 import { Severity } from '../types.ts';
+import { useApp } from '../store.tsx';
 
 interface UptimeGraphProps {
   componentId: string;
+  createdAt?: string;
   days?: number;
 }
 
-const UptimeGraph: React.FC<UptimeGraphProps> = ({ componentId, days = 90 }) => {
-  const [hoveredDay, setHoveredDay] = useState<{index: number, status: Severity} | null>(null);
+enum DailyStatus {
+  OPERATIONAL = 'OPERATIONAL',
+  DEGRADED = 'DEGRADED',
+  OUTAGE = 'OUTAGE',
+  DATA_MISSING = 'DATA_MISSING'
+}
 
-  // Mock uptime logic: Higher indices are more recent.
-  // In a real app, this would be computed from incident history.
+const UptimeGraph: React.FC<UptimeGraphProps> = ({ componentId, createdAt, days = 90 }) => {
+  const { state } = useApp();
+  const [hoveredDay, setHoveredDay] = useState<{index: number, status: DailyStatus} | null>(null);
+
+  // Filter incidents for this component
+  const componentIncidents = React.useMemo(() => {
+    return state.incidents.filter(i => i.componentId === componentId);
+  }, [state.incidents, componentId]);
+
+  // Compute actual history based on component lifetime and incident logs
   const history = React.useMemo(() => {
+    const creationTime = createdAt ? new Date(createdAt).getTime() : 0;
+    
     return Array.from({ length: days }).map((_, i) => {
-      // Simulate occasional hiccups
-      const rand = Math.random();
-      if (rand > 0.98) return Severity.OUTAGE;
-      if (rand > 0.95) return Severity.DEGRADED;
-      return Severity.OPERATIONAL;
-    });
-  }, [componentId, days]);
+      // Index i=0 is 'days-1' days ago, i=days-1 is today
+      const daysAgo = (days - 1) - i;
+      const targetDate = new Date();
+      targetDate.setHours(0, 0, 0, 0);
+      targetDate.setDate(targetDate.getDate() - daysAgo);
+      const targetTimeStart = targetDate.getTime();
+      const targetTimeEnd = targetTimeStart + 24 * 60 * 60 * 1000;
 
-  const getDayColor = (status: Severity) => {
+      // Check if component existed on this day
+      // We check if targetTimeEnd is before creationTime to mark missing data
+      if (targetTimeEnd < creationTime) {
+        return DailyStatus.DATA_MISSING;
+      }
+
+      // Check for incidents overlapping this day
+      const dayIncidents = componentIncidents.filter(inc => {
+        const incStart = new Date(inc.startTime).getTime();
+        const incEnd = inc.endTime ? new Date(inc.endTime).getTime() : Date.now();
+        
+        // Incident overlaps if it starts before end of day AND ends after start of day
+        return incStart < targetTimeEnd && incEnd > targetTimeStart;
+      });
+
+      if (dayIncidents.some(inc => inc.severity === Severity.OUTAGE)) return DailyStatus.OUTAGE;
+      if (dayIncidents.some(inc => inc.severity === Severity.DEGRADED)) return DailyStatus.DEGRADED;
+      
+      return DailyStatus.OPERATIONAL;
+    });
+  }, [componentIncidents, createdAt, days]);
+
+  const getDayColor = (status: DailyStatus) => {
     switch (status) {
-      case Severity.OUTAGE: return 'bg-red-500';
-      case Severity.DEGRADED: return 'bg-yellow-400';
+      case DailyStatus.OUTAGE: return 'bg-red-500';
+      case DailyStatus.DEGRADED: return 'bg-yellow-400';
+      case DailyStatus.DATA_MISSING: return 'bg-gray-200';
       default: return 'bg-emerald-500';
+    }
+  };
+
+  const getStatusLabel = (status: DailyStatus) => {
+    switch (status) {
+      case DailyStatus.OUTAGE: return 'Major Outage';
+      case DailyStatus.DEGRADED: return 'Partial Degradation';
+      case DailyStatus.DATA_MISSING: return 'No data';
+      default: return 'Operational';
     }
   };
 
@@ -50,7 +98,7 @@ const UptimeGraph: React.FC<UptimeGraphProps> = ({ componentId, days = 90 }) => 
           <span className="font-bold opacity-70 mb-0.5">{formatDate(days - 1 - hoveredDay.index)}</span>
           <div className="flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${getDayColor(hoveredDay.status)} shadow-[0_0_4px_rgba(0,0,0,0.5)]`}></span>
-            <span className="capitalize font-medium">{hoveredDay.status.toLowerCase()}</span>
+            <span className="capitalize font-medium">{getStatusLabel(hoveredDay.status)}</span>
           </div>
           {/* Tooltip Arrow */}
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>

@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import express from 'express';
 import { Pool } from 'pg';
@@ -84,6 +85,18 @@ const initDb = async () => {
         await client.query(fs.readFileSync(schemaFile, 'utf8'));
       }
 
+      // Handle migrations: ensure created_at exists
+      await client.query(`
+        DO $$ 
+        BEGIN 
+          BEGIN
+            ALTER TABLE components ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+          EXCEPTION WHEN duplicate_column THEN 
+            -- do nothing
+          END;
+        END $$;
+      `);
+
       // FORCE RESET ADMIN PASSWORD ON STARTUP
       const adminUsername = process.env.ADMIN_USER || 'admin';
       const adminPassword = process.env.ADMIN_PASS || 'password';
@@ -142,8 +155,8 @@ app.get('/api/status', async (req: any, res: any) => {
     const [regions, services, componentsRes, incidents] = await Promise.all([
       pool.query('SELECT id, name FROM regions ORDER BY name'),
       pool.query('SELECT id, region_id AS "regionId", name, description FROM services ORDER BY name'),
-      pool.query('SELECT id, service_id AS "serviceId", name, description FROM components ORDER BY name'),
-      pool.query(`SELECT id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime" FROM incidents WHERE end_time IS NULL OR start_time > NOW() - INTERVAL '7 days' ORDER BY start_time DESC`)
+      pool.query('SELECT id, service_id AS "serviceId", name, description, created_at AS "createdAt" FROM components ORDER BY name'),
+      pool.query(`SELECT id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime" FROM incidents WHERE end_time IS NULL OR start_time > NOW() - INTERVAL '90 days' ORDER BY start_time DESC`)
     ]);
 
     res.json({ 
@@ -192,13 +205,13 @@ app.delete('/api/admin/services/:id', authenticate, async (req: any, res: any) =
 
 app.post('/api/admin/components', authenticate, async (req: any, res: any) => {
   const { serviceId, name, description } = req.body;
-  const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description', [serviceId, name, description]);
+  const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [serviceId, name, description]);
   res.json(result.rows[0]);
 });
 
 app.put('/api/admin/components/:id', authenticate, async (req: any, res: any) => {
   const { name, description } = req.body;
-  const result = await pool.query('UPDATE components SET name = $1, description = $2 WHERE id = $3 RETURNING id, service_id AS "serviceId", name, description', [name, description, req.params.id]);
+  const result = await pool.query('UPDATE components SET name = $1, description = $2 WHERE id = $3 RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [name, description, req.params.id]);
   res.json(result.rows[0]);
 });
 

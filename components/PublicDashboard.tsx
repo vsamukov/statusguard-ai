@@ -16,6 +16,7 @@ const PublicDashboard: React.FC = () => {
 
   const getServiceStatus = (serviceId: string) => {
     const componentIds = state.components.filter(c => c.serviceId === serviceId).map(c => c.id);
+    if (componentIds.length === 0) return Severity.OPERATIONAL;
     const statuses = componentIds.map(getComponentStatus);
     if (statuses.includes(Severity.OUTAGE)) return Severity.OUTAGE;
     if (statuses.includes(Severity.DEGRADED)) return Severity.DEGRADED;
@@ -113,7 +114,7 @@ const PublicDashboard: React.FC = () => {
                                 {compStatus}
                               </div>
                             </div>
-                            <UptimeGraph componentId={comp.id} />
+                            <UptimeGraph componentId={comp.id} createdAt={comp.createdAt} />
                           </div>
                         );
                       })}

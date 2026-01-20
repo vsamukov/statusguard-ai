@@ -23,6 +23,7 @@ export interface Component {
   name: string;
   description: string;
   sla90?: number; // 90-day availability percentage
+  createdAt?: string;
 }
 
 export interface Incident {
