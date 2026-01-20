@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../store.tsx';
 import { Severity } from '../types.ts';
 import { geminiService } from '../services/geminiService.ts';
@@ -25,11 +24,16 @@ const AdminDashboard: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
 
-  const resetForms = () => {
+  // Clear sub-forms when switching primary tabs
+  useEffect(() => {
+    setActiveForm(null);
+    resetFormsState();
+  }, [activeTab]);
+
+  const resetFormsState = () => {
     setRegionForm({ id: '', name: '' });
     setServiceForm({ id: '', regionId: '', name: '', description: '' });
     setCompForm({ id: '', serviceId: '', name: '', description: '' });
-    setActiveForm(null);
   };
 
   const handleAiSuggest = async () => {
@@ -133,7 +137,7 @@ const AdminDashboard: React.FC = () => {
                       required 
                       className="w-full border-gray-200 border p-3 rounded-xl text-sm bg-gray-50 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none" 
                       value={incidentForm.componentId} 
-                      onChange={e => setIncidentForm({...incidentForm, componentId: e.target.value})}
+                      onChange={e => setIncidentForm(prev => ({...prev, componentId: e.target.value}))}
                     >
                       <option value="">Select component...</option>
                       {state.services.map(service => {
@@ -141,7 +145,7 @@ const AdminDashboard: React.FC = () => {
                         const components = state.components.filter(c => c.serviceId === service.id);
                         if (components.length === 0) return null;
                         return (
-                          <optgroup key={service.id} label={`${region?.name || 'Global'} > ${service.name}`}>
+                          <optgroup key={`opt-${service.id}`} label={`${region?.name || 'Global'} > ${service.name}`}>
                             {components.map(c => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
@@ -250,17 +254,6 @@ const AdminDashboard: React.FC = () => {
                    <span className="font-bold text-xl">{state.components.length}</span>
                  </div>
                </div>
-               <div className="mt-6 pt-6 border-t border-white/20">
-                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                    </div>
-                    <div className="text-xs">
-                       <p className="font-bold">Real-time Sync</p>
-                       <p className="opacity-60">StatusGuard Pro v1.4</p>
-                    </div>
-                 </div>
-               </div>
              </div>
           </aside>
         </div>
@@ -275,7 +268,7 @@ const AdminDashboard: React.FC = () => {
                     {region.name}
                   </h3>
                   <div className="flex gap-4">
-                    <button onClick={() => { setRegionForm(region); setActiveForm('region'); }} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">Edit</button>
+                    <button onClick={() => { setRegionForm(region); setActiveForm('region'); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">Edit</button>
                     <button onClick={() => removeRegion(region.id)} className="text-[10px] font-bold text-red-500 hover:text-red-700 uppercase tracking-widest">Delete</button>
                   </div>
                 </div>
@@ -288,7 +281,7 @@ const AdminDashboard: React.FC = () => {
                           <p className="text-[10px] text-gray-400 mt-0.5">{service.description || 'No description provided'}</p>
                         </div>
                         <div className="flex gap-3">
-                          <button onClick={() => { setServiceForm(service); setActiveForm('service'); }} className="text-[10px] text-indigo-600 hover:underline font-bold uppercase">Edit</button>
+                          <button onClick={() => { setServiceForm(service); setActiveForm('service'); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="text-[10px] text-indigo-600 hover:underline font-bold uppercase">Edit</button>
                           <button onClick={() => removeService(service.id)} className="text-[10px] text-red-500 hover:underline font-bold uppercase">Delete</button>
                         </div>
                       </div>
@@ -297,13 +290,13 @@ const AdminDashboard: React.FC = () => {
                           <div key={comp.id} className="flex justify-between items-center text-xs bg-white p-3 rounded-lg shadow-sm border border-gray-100 group">
                             <span className="font-medium text-gray-700">{comp.name}</span>
                             <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => { setCompForm(comp); setActiveForm('component'); }} className="text-indigo-600 hover:underline font-bold">Edit</button>
+                              <button onClick={() => { setCompForm(comp); setActiveForm('component'); window.scrollTo({top: 0, behavior: 'smooth'}); }} className="text-indigo-600 hover:underline font-bold">Edit</button>
                               <button onClick={() => removeComponent(comp.id)} className="text-red-500 hover:underline font-bold">Delete</button>
                             </div>
                           </div>
                         ))}
                         <button 
-                          onClick={() => { resetForms(); setCompForm(prev => ({...prev, serviceId: service.id})); setActiveForm('component'); }} 
+                          onClick={() => { resetFormsState(); setCompForm(prev => ({...prev, serviceId: service.id})); setActiveForm('component'); window.scrollTo({top: 0, behavior: 'smooth'}); }} 
                           className="flex items-center gap-1.5 text-[10px] text-indigo-600 font-bold uppercase mt-3 hover:text-indigo-800 transition-colors"
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
@@ -313,7 +306,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   ))}
                   <button 
-                    onClick={() => { resetForms(); setServiceForm(prev => ({...prev, regionId: region.id})); setActiveForm('service'); }} 
+                    onClick={() => { resetFormsState(); setServiceForm(prev => ({...prev, regionId: region.id})); setActiveForm('service'); window.scrollTo({top: 0, behavior: 'smooth'}); }} 
                     className="w-full py-3 border-2 border-dashed border-gray-100 rounded-xl text-xs font-bold text-gray-400 hover:border-indigo-200 hover:bg-indigo-50/30 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
@@ -323,7 +316,7 @@ const AdminDashboard: React.FC = () => {
               </div>
             ))}
             <button 
-              onClick={() => { resetForms(); setActiveForm('region'); }} 
+              onClick={() => { resetFormsState(); setActiveForm('region'); window.scrollTo({top: 0, behavior: 'smooth'}); }} 
               className="w-full py-6 border-2 border-dashed border-indigo-100 rounded-2xl text-sm font-bold text-indigo-400 hover:bg-indigo-50/50 hover:border-indigo-300 transition-all flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -352,13 +345,13 @@ const AdminDashboard: React.FC = () => {
                       onClick={async () => { 
                         if (!regionForm.name) return;
                         regionForm.id ? await updateRegion(regionForm.id, regionForm.name) : await addRegion(regionForm.name); 
-                        resetForms(); 
+                        setActiveForm(null); resetFormsState();
                       }} 
                       className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-600/20"
                     >
                       Save
                     </button>
-                    <button onClick={resetForms} className="flex-1 border-gray-200 border py-3 rounded-xl text-gray-500 font-bold">Cancel</button>
+                    <button onClick={() => setActiveForm(null)} className="flex-1 border-gray-200 border py-3 rounded-xl text-gray-500 font-bold">Cancel</button>
                   </div>
                 </div>
               )}
@@ -383,7 +376,7 @@ const AdminDashboard: React.FC = () => {
                         className="w-full border-gray-200 border p-3 rounded-xl text-sm outline-none focus:border-indigo-500" 
                         rows={3}
                         value={serviceForm.description} 
-                        onChange={e => setServiceForm({...serviceForm, description: e.target.value})} 
+                        onChange={e => setServiceForm(prev => ({...prev, description: e.target.value}))} 
                       />
                     </div>
                   </div>
@@ -392,13 +385,13 @@ const AdminDashboard: React.FC = () => {
                       onClick={async () => { 
                         if (!serviceForm.name) return;
                         serviceForm.id ? await updateService(serviceForm.id, serviceForm.name, serviceForm.description) : await addService(serviceForm.regionId, serviceForm.name, serviceForm.description); 
-                        resetForms(); 
+                        setActiveForm(null); resetFormsState();
                       }} 
                       className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold"
                     >
                       Save
                     </button>
-                    <button onClick={resetForms} className="flex-1 border-gray-200 border py-3 rounded-xl text-gray-500 font-bold">Cancel</button>
+                    <button onClick={() => setActiveForm(null)} className="flex-1 border-gray-200 border py-3 rounded-xl text-gray-500 font-bold">Cancel</button>
                   </div>
                 </div>
               )}
@@ -432,13 +425,13 @@ const AdminDashboard: React.FC = () => {
                       onClick={async () => { 
                         if (!compForm.name) return;
                         compForm.id ? await updateComponent(compForm.id, compForm.name, compForm.description) : await addComponent(compForm.serviceId, compForm.name, compForm.description); 
-                        resetForms(); 
+                        setActiveForm(null); resetFormsState();
                       }} 
                       className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold"
                     >
                       Save
                     </button>
-                    <button onClick={resetForms} className="flex-1 border-gray-200 border py-3 rounded-xl text-gray-500 font-bold">Cancel</button>
+                    <button onClick={() => setActiveForm(null)} className="flex-1 border-gray-200 border py-3 rounded-xl text-gray-500 font-bold">Cancel</button>
                   </div>
                 </div>
               )}

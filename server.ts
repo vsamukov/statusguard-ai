@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import { Pool } from 'pg';
@@ -35,20 +34,24 @@ const verifyPassword = (password: string, storedValue: string): boolean => {
 /**
  * TRANSPILATION MIDDLEWARE
  * Converts TSX to JS on the fly for the browser.
+ * Injects process.env.API_KEY so the browser can use the Gemini API.
  */
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
   if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) {
-    const filePath = path.join(rootPath, cleanPath);
+    const filePath = path.join(rootPath, cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
     if (!fs.existsSync(filePath)) return next();
 
     try {
       const content = fs.readFileSync(filePath, 'utf8');
       const result = await esbuild.transform(content, {
-        loader: 'tsx',
+        loader: cleanPath.endsWith('.tsx') ? 'tsx' : 'ts',
         format: 'esm',
         target: 'es2020',
-        sourcemap: 'inline'
+        sourcemap: 'inline',
+        define: {
+          'process.env.API_KEY': JSON.stringify(process.env.API_KEY || 'MISSING_API_KEY')
+        }
       });
       res.type('application/javascript');
       res.send(result.code);
@@ -82,7 +85,6 @@ const initDb = async () => {
       }
 
       // FORCE RESET ADMIN PASSWORD ON STARTUP
-      // This ensures that 'admin' / 'password' (or .env values) always work.
       const adminUsername = process.env.ADMIN_USER || 'admin';
       const adminPassword = process.env.ADMIN_PASS || 'password';
       const hashed = hashPassword(adminPassword);
@@ -91,7 +93,7 @@ const initDb = async () => {
         'INSERT INTO users (username, password_hash) VALUES ($1, $2) ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash', 
         [adminUsername, hashed]
       );
-      console.log(`[STATUSGUARD] Admin user '${adminUsername}' synchronized with pass: ${adminPassword}`);
+      console.log(`[STATUSGUARD] Admin user '${adminUsername}' synchronized.`);
 
       const seedFile = path.join(rootPath, 'seed.sql');
       const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
@@ -121,24 +123,16 @@ const authenticate = (req: any, res: any, next: any) => {
  */
 app.post('/api/auth/login', async (req: any, res: any) => {
   const { username, password } = req.body;
-  console.log(`[AUTH] Login attempt for: ${username}`);
-  
   try {
     const result = await pool.query('SELECT password_hash FROM users WHERE username = $1', [username]);
-    if (result.rowCount === 0) {
-      console.warn(`[AUTH] User not found: ${username}`);
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    if (result.rowCount === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
     if (verifyPassword(password, result.rows[0].password_hash)) {
-      console.log(`[AUTH] Login success: ${username}`);
       res.json({ token: process.env.ADMIN_TOKEN || 'statusguard-admin-token' });
     } else {
-      console.warn(`[AUTH] Invalid password for: ${username}`);
       res.status(401).json({ error: 'Invalid credentials' });
     }
   } catch (err) {
-    console.error('[AUTH] Server error during login:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -152,11 +146,10 @@ app.get('/api/status', async (req: any, res: any) => {
       pool.query(`SELECT id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime" FROM incidents WHERE end_time IS NULL OR start_time > NOW() - INTERVAL '7 days' ORDER BY start_time DESC`)
     ]);
 
-    // SLA logic omitted for brevity in response, remains as in original
     res.json({ 
       regions: regions.rows, 
       services: services.rows, 
-      components: componentsRes.rows.map(c => ({ ...c, sla90: 100 })), // Mocking SLA for quick fix
+      components: componentsRes.rows.map(c => ({ ...c, sla90: 100 })),
       incidents: incidents.rows 
     });
   } catch (err) {
@@ -170,7 +163,6 @@ app.post('/api/admin/regions', authenticate, async (req: any, res: any) => {
   res.json(result.rows[0]);
 });
 
-// Fix: Added Region PUT/DELETE handlers
 app.put('/api/admin/regions/:id', authenticate, async (req: any, res: any) => {
   const result = await pool.query('UPDATE regions SET name = $1 WHERE id = $2 RETURNING *', [req.body.name, req.params.id]);
   res.json(result.rows[0]);
@@ -181,7 +173,6 @@ app.delete('/api/admin/regions/:id', authenticate, async (req: any, res: any) =>
   res.json({ success: true });
 });
 
-// Fix: Added Service admin routes
 app.post('/api/admin/services', authenticate, async (req: any, res: any) => {
   const { regionId, name, description } = req.body;
   const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', [regionId, name, description]);
@@ -199,7 +190,6 @@ app.delete('/api/admin/services/:id', authenticate, async (req: any, res: any) =
   res.json({ success: true });
 });
 
-// Fix: Added Component admin routes
 app.post('/api/admin/components', authenticate, async (req: any, res: any) => {
   const { serviceId, name, description } = req.body;
   const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description', [serviceId, name, description]);
