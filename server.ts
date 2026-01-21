@@ -133,8 +133,14 @@ const authenticate = (req: any, res: any, next: any) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
   const token = authHeader.split(' ')[1];
   
+  // Use env token as fallback for simplicity, but sessions take precedence
+  const masterToken = process.env.ADMIN_TOKEN || 'voximplant-status-admin-token';
+  
   if (sessions.has(token)) {
     req.username = sessions.get(token);
+    return next();
+  } else if (token === masterToken) {
+    req.username = process.env.ADMIN_USER || 'admin';
     return next();
   }
   res.status(401).json({ error: 'Unauthorized' });
