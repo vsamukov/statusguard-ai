@@ -169,7 +169,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
               <form onSubmit={handleReport} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest">Component</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-widest">Impacted Component</label>
                     <select 
                       required 
                       className="w-full border-gray-200 border p-3 rounded-xl text-sm bg-gray-50 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none" 
@@ -177,13 +177,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                       onChange={e => setIncidentForm(prev => ({...prev, componentId: e.target.value}))}
                     >
                       <option value="">Select component...</option>
-                      {state.services.map(service => (
-                        <optgroup key={`opt-${service.id}`} label={service.name}>
-                          {state.components.filter(c => c.serviceId === service.id).map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </optgroup>
-                      ))}
+                      {state.regions.map(region => {
+                        const regionServices = state.services.filter(s => s.regionId === region.id);
+                        if (regionServices.length === 0) return null;
+                        
+                        return regionServices.map(service => {
+                          const components = state.components.filter(c => c.serviceId === service.id);
+                          if (components.length === 0) return null;
+                          
+                          return (
+                            <optgroup 
+                              key={`opt-${region.id}-${service.id}`} 
+                              label={`${region.name} › ${service.name}`}
+                            >
+                              {components.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </optgroup>
+                          );
+                        });
+                      })}
                     </select>
                   </div>
                   <div>
