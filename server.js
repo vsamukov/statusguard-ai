@@ -35,7 +35,6 @@ const verifyPassword = (password, storedValue) => {
 
 /**
  * TRANSPILATION MIDDLEWARE
- * Intercepts requests for .ts and .tsx files and transpiles them for the browser.
  */
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
@@ -82,10 +81,10 @@ const initDb = async () => {
     try {
       const schemaFile = path.join(rootPath, 'schema.sql');
       if (fs.existsSync(schemaFile)) {
+        console.log('[VOXIMPLANT] Applying schema...');
         await client.query(fs.readFileSync(schemaFile, 'utf8'));
       }
 
-      // Initial Admin Setup
       const adminUsername = process.env.ADMIN_USER || 'admin';
       const adminPassword = process.env.ADMIN_PASS || 'password';
       const hashed = hashPassword(adminPassword);
@@ -95,7 +94,6 @@ const initDb = async () => {
         [adminUsername, hashed]
       );
 
-      // Seed if empty
       const seedFile = path.join(rootPath, 'seed.sql');
       const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
       if (rowCount === 0 && fs.existsSync(seedFile)) {
@@ -118,7 +116,6 @@ const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
   const token = authHeader.split(' ')[1];
-  
   const masterToken = process.env.ADMIN_TOKEN || 'voximplant-status-admin-token';
   
   if (sessions.has(token)) {
@@ -131,6 +128,9 @@ const authenticate = (req, res, next) => {
   res.status(401).json({ error: 'Unauthorized' });
 };
 
+/**
+ * AUDIT LOGGING HELPER
+ */
 const auditLog = async (username, actionType, targetType, targetName, details) => {
   try {
     await pool.query(
@@ -138,7 +138,7 @@ const auditLog = async (username, actionType, targetType, targetName, details) =
       [username, actionType, targetType, targetName, details ? JSON.stringify(details) : null]
     );
   } catch (err) {
-    console.error('[AUDIT] Failed to log action:', err);
+    console.error('[AUDIT] FAILED TO WRITE TO DATABASE:', err);
   }
 };
 
@@ -175,7 +175,7 @@ app.get('/api/status', async (req, res) => {
     res.json({ 
       regions: regions.rows, 
       services: services.rows, 
-      components: componentsRes.rows.map(c => ({ ...c, sla90: 100 })),
+      components: componentsRes.rows,
       incidents: incidents.rows 
     });
   } catch (err) {
@@ -184,11 +184,159 @@ app.get('/api/status', async (req, res) => {
 });
 
 app.get('/api/admin/data', authenticate, async (req, res) => {
-  const [users, auditLogs] = await Promise.all([
-    pool.query('SELECT id, username, created_at AS "createdAt" FROM users ORDER BY created_at DESC'),
-    pool.query('SELECT id, username, action_type AS "actionType", target_type AS "targetType", target_name AS "targetName", details, created_at AS "createdAt" FROM audit_logs ORDER BY created_at DESC LIMIT 100')
-  ]);
-  res.json({ users: users.rows, auditLogs: auditLogs.rows });
+  try {
+    const [users, auditLogs] = await Promise.all([
+      pool.query('SELECT id, username, created_at AS "createdAt" FROM users ORDER BY created_at DESC'),
+      pool.query('SELECT id, username, action_type AS "actionType", target_type AS "targetType", target_name AS "targetName", details, created_at AS "createdAt" FROM audit_logs ORDER BY created_at DESC LIMIT 100')
+    ]);
+    res.json({ users: users.rows, auditLogs: auditLogs.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Admin data fetch failed' });
+  }
+});
+
+/**
+ * INCIDENT MANAGEMENT (AUDITED)
+ */
+app.post('/api/admin/incidents', authenticate, async (req, res) => {
+  const { componentId, title, internalDesc, severity } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO incidents (component_id, title, description, severity) VALUES ($1, $2, $3, $4) RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', 
+      [componentId, title, internalDesc, severity]
+    );
+    await auditLog(req.username, 'REPORT_INCIDENT', 'INCIDENT', title, { severity, componentId });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to report incident' });
+  }
+});
+
+app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
+  const { componentId, title, description, severity, startTime, endTime } = req.body;
+  try {
+    // 1. Get previous state for audit log
+    const prevRes = await pool.query('SELECT * FROM incidents WHERE id = $1', [req.params.id]);
+    if (prevRes.rowCount === 0) return res.status(404).json({ error: 'Incident not found' });
+    const prev = prevRes.rows[0];
+
+    // 2. Perform update
+    const result = await pool.query(
+      `UPDATE incidents 
+       SET component_id = $1, title = $2, description = $3, severity = $4, start_time = $5, end_time = $6 
+       WHERE id = $7 
+       RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"`,
+      [componentId, title, description, severity, startTime, endTime, req.params.id]
+    );
+    
+    // 3. Detailed Audit Log
+    await auditLog(req.username, 'UPDATE_INCIDENT', 'INCIDENT', title, {
+      previous: {
+        componentId: prev.component_id,
+        severity: prev.severity,
+        startTime: prev.start_time,
+        endTime: prev.end_time
+      },
+      updated: {
+        componentId,
+        severity,
+        startTime,
+        endTime
+      }
+    });
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Update failed' });
+  }
+});
+
+app.post('/api/admin/incidents/:id/resolve', authenticate, async (req, res) => {
+  try {
+    const target = await pool.query('SELECT title FROM incidents WHERE id = $1', [req.params.id]);
+    if (target.rowCount === 0) return res.status(404).json({ error: 'Incident not found' });
+    
+    const result = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [req.params.id]);
+    await auditLog(req.username, 'RESOLVE_INCIDENT', 'INCIDENT', target.rows[0].title);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Resolution failed' });
+  }
+});
+
+/**
+ * INFRASTRUCTURE MANAGEMENT (AUDITED)
+ */
+app.post('/api/admin/regions', authenticate, async (req, res) => {
+  try {
+    const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
+    await auditLog(req.username, 'CREATE_REGION', 'REGION', req.body.name);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create region' });
+  }
+});
+
+app.delete('/api/admin/regions/:id', authenticate, async (req, res) => {
+  try {
+    const target = await pool.query('SELECT name FROM regions WHERE id = $1', [req.params.id]);
+    if (target.rowCount === 0) return res.status(404).json({ error: 'Region not found' });
+    
+    await pool.query('DELETE FROM regions WHERE id = $1', [req.params.id]);
+    await auditLog(req.username, 'DELETE_REGION', 'REGION', target.rows[0].name);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete region' });
+  }
+});
+
+app.post('/api/admin/services', authenticate, async (req, res) => {
+  const { regionId, name, description } = req.body;
+  try {
+    const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', [regionId, name, description]);
+    await auditLog(req.username, 'CREATE_SERVICE', 'SERVICE', name);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create service' });
+  }
+});
+
+app.delete('/api/admin/services/:id', authenticate, async (req, res) => {
+  try {
+    const target = await pool.query('SELECT name FROM services WHERE id = $1', [req.params.id]);
+    if (target.rowCount === 0) return res.status(404).json({ error: 'Service not found' });
+    
+    await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
+    await auditLog(req.username, 'DELETE_SERVICE', 'SERVICE', target.rows[0].name);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete service' });
+  }
+});
+
+app.post('/api/admin/components', authenticate, async (req, res) => {
+  const { serviceId, name, description } = req.body;
+  try {
+    const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [serviceId, name, description]);
+    await auditLog(req.username, 'CREATE_COMPONENT', 'COMPONENT', name);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create component' });
+  }
+});
+
+app.delete('/api/admin/components/:id', authenticate, async (req, res) => {
+  try {
+    const target = await pool.query('SELECT name FROM components WHERE id = $1', [req.params.id]);
+    if (target.rowCount === 0) return res.status(404).json({ error: 'Component not found' });
+    
+    await pool.query('DELETE FROM components WHERE id = $1', [req.params.id]);
+    await auditLog(req.username, 'DELETE_COMPONENT', 'COMPONENT', target.rows[0].name);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete component' });
+  }
 });
 
 app.post('/api/admin/users', authenticate, async (req, res) => {
@@ -198,76 +346,30 @@ app.post('/api/admin/users', authenticate, async (req, res) => {
     const result = await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, created_at AS "createdAt"', [username, hashed]);
     await auditLog(req.username, 'CREATE_USER', 'USER', username);
     res.json(result.rows[0]);
-  } catch (err) {
-    res.status(400).json({ error: 'User already exists' });
+  } catch (err) { 
+    res.status(400).json({ error: 'User already exists' }); 
   }
 });
 
 app.delete('/api/admin/users/:id', authenticate, async (req, res) => {
-  const user = await pool.query('SELECT username FROM users WHERE id = $1', [req.params.id]);
-  if (user.rowCount === 0) return res.status(404).json({ error: 'Not found' });
-  if (user.rows[0].username === req.username) return res.status(400).json({ error: 'Cannot delete self' });
+  try {
+    const userRes = await pool.query('SELECT username FROM users WHERE id = $1', [req.params.id]);
+    if (userRes.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    const username = userRes.rows[0].username;
 
-  await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
-  await auditLog(req.username, 'DELETE_USER', 'USER', user.rows[0].username);
-  res.json({ success: true });
+    if (username === req.username) return res.status(400).json({ error: 'Cannot delete self' });
+
+    await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+    await auditLog(req.username, 'DELETE_USER', 'USER', username);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
 });
 
-app.post('/api/admin/regions', authenticate, async (req, res) => {
-  const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
-  await auditLog(req.username, 'CREATE_REGION', 'REGION', req.body.name);
-  res.json(result.rows[0]);
-});
-
-app.delete('/api/admin/regions/:id', authenticate, async (req, res) => {
-  const target = await pool.query('SELECT name FROM regions WHERE id = $1', [req.params.id]);
-  await pool.query('DELETE FROM regions WHERE id = $1', [req.params.id]);
-  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_REGION', 'REGION', target.rows[0].name);
-  res.json({ success: true });
-});
-
-app.post('/api/admin/services', authenticate, async (req, res) => {
-  const { regionId, name, description } = req.body;
-  const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', [regionId, name, description]);
-  await auditLog(req.username, 'CREATE_SERVICE', 'SERVICE', name);
-  res.json(result.rows[0]);
-});
-
-app.delete('/api/admin/services/:id', authenticate, async (req, res) => {
-  const target = await pool.query('SELECT name FROM services WHERE id = $1', [req.params.id]);
-  await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
-  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_SERVICE', 'SERVICE', target.rows[0].name);
-  res.json({ success: true });
-});
-
-app.post('/api/admin/components', authenticate, async (req, res) => {
-  const { serviceId, name, description } = req.body;
-  const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [serviceId, name, description]);
-  await auditLog(req.username, 'CREATE_COMPONENT', 'COMPONENT', name);
-  res.json(result.rows[0]);
-});
-
-app.delete('/api/admin/components/:id', authenticate, async (req, res) => {
-  const target = await pool.query('SELECT name FROM components WHERE id = $1', [req.params.id]);
-  await pool.query('DELETE FROM components WHERE id = $1', [req.params.id]);
-  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_COMPONENT', 'COMPONENT', target.rows[0].name);
-  res.json({ success: true });
-});
-
-app.post('/api/admin/incidents', authenticate, async (req, res) => {
-  const { componentId, title, internalDesc, severity } = req.body;
-  const result = await pool.query('INSERT INTO incidents (component_id, title, description, severity) VALUES ($1, $2, $3, $4) RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [componentId, title, internalDesc, severity]);
-  await auditLog(req.username, 'REPORT_INCIDENT', 'INCIDENT', title, { severity });
-  res.json(result.rows[0]);
-});
-
-app.post('/api/admin/incidents/:id/resolve', authenticate, async (req, res) => {
-  const target = await pool.query('SELECT title FROM incidents WHERE id = $1', [req.params.id]);
-  const result = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [req.params.id]);
-  if (target.rowCount > 0) await auditLog(req.username, 'RESOLVE_INCIDENT', 'INCIDENT', target.rows[0].title);
-  res.json(result.rows[0]);
-});
-
+/**
+ * STATIC HANDLER
+ */
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api/') && !req.path.includes('.')) {
     return res.sendFile(path.join(rootPath, 'index.html'));

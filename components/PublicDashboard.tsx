@@ -5,7 +5,7 @@ import { Severity } from '../types.ts';
 import UptimeGraph from './UptimeGraph.tsx';
 
 const PublicDashboard: React.FC = () => {
-  const { state } = useApp();
+  const { state, calculateSLA } = useApp();
 
   const getComponentStatus = (componentId: string) => {
     const activeIncidents = state.incidents.filter(i => i.componentId === componentId && !i.endTime);
@@ -46,7 +46,7 @@ const PublicDashboard: React.FC = () => {
           </h2>
           <div className="space-y-4">
             {state.incidents.filter(i => !i.endTime).map(incident => (
-              <div key={incident.id} className="bg-white border-l-4 border-red-500 rounded-lg p-6 shadow-sm">
+              <div key={incident.id} className="bg-white border-l-4 border-red-500 rounded-lg p-6 shadow-sm animate-in fade-in slide-in-from-top-2">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-lg">{incident.title}</h3>
                   <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
@@ -95,14 +95,15 @@ const PublicDashboard: React.FC = () => {
                     <div className="divide-y divide-gray-50">
                       {state.components.filter(c => c.serviceId === service.id).map(comp => {
                         const compStatus = getComponentStatus(comp.id);
+                        const sla = calculateSLA(comp.id);
                         return (
                           <div key={comp.id} className="p-6 hover:bg-gray-50 transition-colors">
                             <div className="flex justify-between items-center mb-3">
                               <div>
                                 <h4 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
                                   {comp.name}
-                                  <span className="text-[10px] text-gray-400 font-medium bg-gray-100 px-1.5 py-0.5 rounded">
-                                    90D SLA: {comp.sla90 ?? 100}%
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${sla < 99.9 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                                    90D SLA: {sla}%
                                   </span>
                                 </h4>
                                 <p className="text-[10px] text-gray-400">{comp.description}</p>

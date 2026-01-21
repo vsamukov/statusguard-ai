@@ -1,27 +1,26 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppState, Severity, AdminUser, AuditLog } from './types.ts';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { AppState, Severity, AdminUser, AuditLog, Incident } from './types.ts';
 import { api } from './services/api.ts';
 
 interface AppContextType {
   state: AppState;
   isLoading: boolean;
   addRegion: (name: string) => Promise<void>;
-  updateRegion: (id: string, name: string) => Promise<void>;
   removeRegion: (id: string) => Promise<void>;
   addService: (regionId: string, name: string, description: string) => Promise<void>;
-  updateService: (id: string, name: string, description: string) => Promise<void>;
   removeService: (id: string) => Promise<void>;
   addComponent: (serviceId: string, name: string, description: string) => Promise<void>;
-  updateComponent: (id: string, name: string, description: string) => Promise<void>;
   removeComponent: (id: string) => Promise<void>;
-  reportIncident: (incident: { componentId: string, title: string, internalDesc: string, severity: Severity }) => Promise<void>;
+  reportIncident: (incident: any) => Promise<void>;
+  updateIncident: (id: string, incident: any) => Promise<void>;
   resolveIncident: (incidentId: string) => Promise<void>;
   createAdmin: (user: any) => Promise<void>;
   deleteAdmin: (id: string) => Promise<void>;
   login: (credentials: any) => Promise<void>;
   logout: () => void;
   fetchAdminData: () => Promise<void>;
+  calculateSLA: (componentId: string, days?: number) => number;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -69,84 +68,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (state.isAuthenticated) fetchAdminData();
   }, [fetchData, fetchAdminData, state.isAuthenticated]);
 
-  const addRegion = async (name: string) => {
-    await api.createRegion(name);
-    fetchData();
-    fetchAdminData();
-  };
+  const addRegion = async (name: string) => { await api.createRegion(name); await fetchData(); await fetchAdminData(); };
+  const removeRegion = async (id: string) => { await api.deleteRegion(id); await fetchData(); await fetchAdminData(); };
+  const addService = async (rid: string, n: string, d: string) => { await api.createService(rid, n, d); await fetchData(); await fetchAdminData(); };
+  const removeService = async (id: string) => { await api.deleteService(id); await fetchData(); await fetchAdminData(); };
+  const addComponent = async (sid: string, n: string, d: string) => { await api.createComponent(sid, n, d); await fetchData(); await fetchAdminData(); };
+  const removeComponent = async (id: string) => { await api.deleteComponent(id); await fetchData(); await fetchAdminData(); };
+  
+  const reportIncident = async (inc: any) => { await api.createIncident(inc); await fetchData(); await fetchAdminData(); };
+  const updateIncident = async (id: string, inc: any) => { await api.updateIncident(id, inc); await fetchData(); await fetchAdminData(); };
+  const resolveIncident = async (id: string) => { await api.resolveIncident(id); await fetchData(); await fetchAdminData(); };
 
-  const updateRegion = async (id: string, name: string) => {
-    await api.updateRegion(id, name);
-    fetchData();
-    fetchAdminData();
-  };
+  const createAdmin = async (u: any) => { await api.createUser(u); await fetchAdminData(); };
+  const deleteAdmin = async (id: string) => { await api.deleteUser(id); await fetchAdminData(); };
 
-  const removeRegion = async (id: string) => {
-    await api.deleteRegion(id);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const addService = async (regionId: string, name: string, description: string) => {
-    await api.createService(regionId, name, description);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const updateService = async (id: string, name: string, description: string) => {
-    await api.updateService(id, name, description);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const removeService = async (id: string) => {
-    await api.deleteService(id);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const addComponent = async (serviceId: string, name: string, description: string) => {
-    await api.createComponent(serviceId, name, description);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const updateComponent = async (id: string, name: string, description: string) => {
-    await api.updateComponent(id, name, description);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const removeComponent = async (id: string) => {
-    await api.deleteComponent(id);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const reportIncident = async (incident: any) => {
-    await api.createIncident(incident);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const resolveIncident = async (id: string) => {
-    await api.resolveIncident(id);
-    fetchData();
-    fetchAdminData();
-  };
-
-  const createAdmin = async (user: any) => {
-    await api.createUser(user);
-    fetchAdminData();
-  };
-
-  const deleteAdmin = async (id: string) => {
-    await api.deleteUser(id);
-    fetchAdminData();
-  };
-
-  const login = async (credentials: any) => {
-    const { token, username } = await api.login(credentials);
+  const login = async (cred: any) => {
+    const { token, username } = await api.login(cred);
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, username);
     setState(prev => ({ ...prev, isAuthenticated: true, currentUser: username }));
@@ -160,11 +97,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, isAuthenticated: false, currentUser: undefined }));
   };
 
+  const calculateSLA = useCallback((componentId: string, days = 90) => {
+    const now = Date.now();
+    const periodStart = now - (days * 24 * 60 * 60 * 1000);
+    const totalMinutes = days * 24 * 60;
+    
+    const componentIncidents = state.incidents.filter(i => i.componentId === componentId);
+    let totalDowntimeMinutes = 0;
+
+    componentIncidents.forEach(inc => {
+      const incStart = Math.max(new Date(inc.startTime).getTime(), periodStart);
+      const incEnd = inc.endTime ? new Date(inc.endTime).getTime() : now;
+
+      if (incEnd > periodStart) {
+        const durationMs = incEnd - incStart;
+        if (durationMs > 0) {
+          const durationMinutes = durationMs / (1000 * 60);
+          // Outage is 100% impact, Degraded is 50% impact for SLA purposes
+          const impactFactor = inc.severity === Severity.OUTAGE ? 1 : 0.5;
+          totalDowntimeMinutes += durationMinutes * impactFactor;
+        }
+      }
+    });
+
+    const availability = ((totalMinutes - totalDowntimeMinutes) / totalMinutes) * 100;
+    return Math.max(0, Math.min(100, parseFloat(availability.toFixed(3))));
+  }, [state.incidents]);
+
   return (
     <AppContext.Provider value={{
-      state, isLoading, addRegion, updateRegion, removeRegion, addService, 
-      updateService, removeService, addComponent, updateComponent, removeComponent,
-      reportIncident, resolveIncident, createAdmin, deleteAdmin, login, logout, fetchAdminData
+      state, isLoading, addRegion, removeRegion, addService, 
+      removeService, addComponent, removeComponent,
+      reportIncident, updateIncident, resolveIncident, createAdmin, deleteAdmin, login, logout, fetchAdminData,
+      calculateSLA
     }}>
       {children}
     </AppContext.Provider>

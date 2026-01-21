@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../store.tsx';
 import { Severity, Region, Service, Component } from '../types.ts';
@@ -11,9 +10,10 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   const { 
     state, 
-    addRegion, updateRegion, removeRegion,
-    addService, updateService, removeService,
-    addComponent, updateComponent, removeComponent,
+    // Fix: removed updateRegion, updateService, and updateComponent as they are not defined in AppContextType
+    addRegion, removeRegion,
+    addService, removeService,
+    addComponent, removeComponent,
     reportIncident, resolveIncident, createAdmin, deleteAdmin, logout, fetchAdminData
   } = useApp();
 
