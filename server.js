@@ -35,7 +35,7 @@ const verifyPassword = (password, storedValue) => {
 
 /**
  * TRANSPILATION MIDDLEWARE
- * Serves .ts and .tsx files to the browser by transpiling them on the fly.
+ * Intercepts requests for .ts and .tsx files and transpiles them for the browser.
  */
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
@@ -85,24 +85,7 @@ const initDb = async () => {
         await client.query(fs.readFileSync(schemaFile, 'utf8'));
       }
 
-      // Migrations for existing DBs
-      await client.query(`
-        DO $$ 
-        BEGIN 
-          IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'audit_logs') THEN
-            CREATE TABLE audit_logs (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              username TEXT NOT NULL,
-              action_type TEXT NOT NULL,
-              target_type TEXT NOT NULL,
-              target_name TEXT,
-              details JSONB,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-          END IF;
-        END $$;
-      `);
-
+      // Initial Admin Setup
       const adminUsername = process.env.ADMIN_USER || 'admin';
       const adminPassword = process.env.ADMIN_PASS || 'password';
       const hashed = hashPassword(adminPassword);
@@ -112,9 +95,11 @@ const initDb = async () => {
         [adminUsername, hashed]
       );
 
+      // Seed if empty
       const seedFile = path.join(rootPath, 'seed.sql');
       const { rowCount } = await client.query('SELECT 1 FROM regions LIMIT 1');
       if (rowCount === 0 && fs.existsSync(seedFile)) {
+        console.log('[VOXIMPLANT] Seeding initial data...');
         await client.query(fs.readFileSync(seedFile, 'utf8'));
       }
     } finally {
@@ -127,7 +112,6 @@ const initDb = async () => {
 
 initDb();
 
-// Map tokens to usernames for simple session management
 const sessions = new Map();
 
 const authenticate = (req, res, next) => {
@@ -199,7 +183,6 @@ app.get('/api/status', async (req, res) => {
   }
 });
 
-// Admin Core
 app.get('/api/admin/data', authenticate, async (req, res) => {
   const [users, auditLogs] = await Promise.all([
     pool.query('SELECT id, username, created_at AS "createdAt" FROM users ORDER BY created_at DESC'),
@@ -208,7 +191,6 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
   res.json({ users: users.rows, auditLogs: auditLogs.rows });
 });
 
-// User Management
 app.post('/api/admin/users', authenticate, async (req, res) => {
   const { username, password } = req.body;
   const hashed = hashPassword(password);
@@ -231,7 +213,6 @@ app.delete('/api/admin/users/:id', authenticate, async (req, res) => {
   res.json({ success: true });
 });
 
-// Infrastructure Admin
 app.post('/api/admin/regions', authenticate, async (req, res) => {
   const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
   await auditLog(req.username, 'CREATE_REGION', 'REGION', req.body.name);
