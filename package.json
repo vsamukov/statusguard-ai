@@ -2,6 +2,7 @@
 {
   "name": "voximplant-status",
   "version": "1.0.0",
+  "type": "module",
   "description": "Enterprise Status Page for Voximplant with SLA tracking",
   "main": "server.ts",
   "dependencies": {
