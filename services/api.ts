@@ -14,11 +14,18 @@ const getHeaders = (skipAuth = false) => {
   return headers;
 };
 
+const handleResponse = async (res: Response) => {
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+  }
+  return res.json();
+};
+
 export const api = {
   async getStatus() {
     const res = await fetch(`${API_BASE}/status`);
-    if (!res.ok) throw new Error('Failed to fetch status');
-    return res.json();
+    return handleResponse(res);
   },
 
   async login(credentials: any) {
@@ -27,69 +34,105 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
     });
-    if (!res.ok) throw new Error('Invalid credentials');
-    return res.json();
+    return handleResponse(res);
   },
 
   async getAdminData() {
     const res = await fetch(`${API_BASE}/admin/data`, { headers: getHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch admin data');
-    return res.json();
+    return handleResponse(res);
   },
 
   async createUser(user: any) {
-    const res = await fetch(`${API_BASE}/admin/users`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(user) });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/users`, { 
+      method: 'POST', 
+      headers: getHeaders(), 
+      body: JSON.stringify(user) 
+    });
+    return handleResponse(res);
   },
 
   async deleteUser(id: string) {
-    const res = await fetch(`${API_BASE}/admin/users/${id}`, { method: 'DELETE', headers: getHeaders() });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/users/${id}`, { 
+      method: 'DELETE', 
+      headers: getHeaders() 
+    });
+    return handleResponse(res);
   },
 
   async createRegion(name: string) {
-    const res = await fetch(`${API_BASE}/admin/regions`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ name }) });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/regions`, { 
+      method: 'POST', 
+      headers: getHeaders(), 
+      body: JSON.stringify({ name }) 
+    });
+    return handleResponse(res);
   },
 
   async deleteRegion(id: string) {
-    const res = await fetch(`${API_BASE}/admin/regions/${id}`, { method: 'DELETE', headers: getHeaders() });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/regions/${id}`, { 
+      method: 'DELETE', 
+      headers: getHeaders() 
+    });
+    return handleResponse(res);
   },
 
   async createService(regionId: string, name: string, description: string) {
-    const res = await fetch(`${API_BASE}/admin/services`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ regionId, name, description }) });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/services`, { 
+      method: 'POST', 
+      headers: getHeaders(), 
+      body: JSON.stringify({ regionId, name, description }) 
+    });
+    return handleResponse(res);
   },
 
   async deleteService(id: string) {
-    const res = await fetch(`${API_BASE}/admin/services/${id}`, { method: 'DELETE', headers: getHeaders() });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/services/${id}`, { 
+      method: 'DELETE', 
+      headers: getHeaders() 
+    });
+    return handleResponse(res);
   },
 
   async createComponent(serviceId: string, name: string, description: string) {
-    const res = await fetch(`${API_BASE}/admin/components`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ serviceId, name, description }) });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/components`, { 
+      method: 'POST', 
+      headers: getHeaders(), 
+      body: JSON.stringify({ serviceId, name, description }) 
+    });
+    return handleResponse(res);
   },
 
   async deleteComponent(id: string) {
-    const res = await fetch(`${API_BASE}/admin/components/${id}`, { method: 'DELETE', headers: getHeaders() });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/components/${id}`, { 
+      method: 'DELETE', 
+      headers: getHeaders() 
+    });
+    return handleResponse(res);
   },
 
   async createIncident(incident: any) {
-    const res = await fetch(`${API_BASE}/admin/incidents`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(incident) });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/incidents`, { 
+      method: 'POST', 
+      headers: getHeaders(), 
+      body: JSON.stringify(incident) 
+    });
+    return handleResponse(res);
   },
 
   async updateIncident(id: string, incident: any) {
-    const res = await fetch(`${API_BASE}/admin/incidents/${id}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(incident) });
-    if (!res.ok) throw new Error('Failed to update incident');
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/incidents/${id}`, { 
+      method: 'PUT', 
+      headers: getHeaders(), 
+      body: JSON.stringify(incident) 
+    });
+    return handleResponse(res);
   },
 
   async resolveIncident(id: string) {
-    const res = await fetch(`${API_BASE}/admin/incidents/${id}/resolve`, { method: 'POST', headers: getHeaders() });
-    return res.json();
+    const res = await fetch(`${API_BASE}/admin/incidents/${id}/resolve`, { 
+      method: 'POST', 
+      headers: getHeaders() 
+    });
+    return handleResponse(res);
   }
 };

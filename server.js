@@ -132,12 +132,13 @@ const authenticate = (req, res, next) => {
  */
 const auditLog = async (username, actionType, targetType, targetName, details) => {
   try {
+    // Note: Do not JSON.stringify here, pg driver handles objects for JSONB columns correctly.
     await pool.query(
       'INSERT INTO audit_logs (username, action_type, target_type, target_name, details) VALUES ($1, $2, $3, $4, $5)',
-      [username, actionType, targetType, targetName, details ? JSON.stringify(details) : null]
+      [username, actionType, targetType, targetName, details || null]
     );
   } catch (err) {
-    console.error('[AUDIT] Failed to log action:', err);
+    console.error('[AUDIT] Failed to log action to database:', err);
   }
 };
 
@@ -195,15 +196,16 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
 });
 
 app.post('/api/admin/incidents', authenticate, async (req, res) => {
-  const { componentId, title, internalDesc, severity } = req.body;
+  const { componentId, title, internalDesc, severity, startTime } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO incidents (component_id, title, description, severity) VALUES ($1, $2, $3, $4) RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', 
-      [componentId, title, internalDesc, severity]
+      'INSERT INTO incidents (component_id, title, description, severity, start_time) VALUES ($1::uuid, $2, $3, $4, $5) RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', 
+      [componentId, title, internalDesc, severity, startTime || new Date().toISOString()]
     );
     await auditLog(req.username, 'REPORT_INCIDENT', 'INCIDENT', title, { severity, componentId });
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to report incident' });
   }
 });
@@ -211,14 +213,14 @@ app.post('/api/admin/incidents', authenticate, async (req, res) => {
 app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
   const { componentId, title, description, severity, startTime, endTime } = req.body;
   try {
-    const prevRes = await pool.query('SELECT * FROM incidents WHERE id = $1', [req.params.id]);
+    const prevRes = await pool.query('SELECT * FROM incidents WHERE id = $1::uuid', [req.params.id]);
     if (prevRes.rowCount === 0) return res.status(404).json({ error: 'Incident not found' });
     const prev = prevRes.rows[0];
 
     const result = await pool.query(
       `UPDATE incidents 
-       SET component_id = $1, title = $2, description = $3, severity = $4, start_time = $5, end_time = $6 
-       WHERE id = $7 
+       SET component_id = $1::uuid, title = $2, description = $3, severity = $4, start_time = $5, end_time = $6 
+       WHERE id = $7::uuid 
        RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"`,
       [componentId, title, description, severity, startTime, endTime, req.params.id]
     );
@@ -247,55 +249,84 @@ app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
 
 app.post('/api/admin/incidents/:id/resolve', authenticate, async (req, res) => {
   try {
-    const target = await pool.query('SELECT title FROM incidents WHERE id = $1', [req.params.id]);
+    const target = await pool.query('SELECT title FROM incidents WHERE id = $1::uuid', [req.params.id]);
     if (target.rowCount === 0) return res.status(404).json({ error: 'Incident not found' });
-    const result = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [req.params.id]);
+    
+    const result = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1::uuid RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', [req.params.id]);
+    
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Incident resolution failed' });
+
     await auditLog(req.username, 'RESOLVE_INCIDENT', 'INCIDENT', target.rows[0].title);
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Resolution failed' });
   }
 });
 
 app.post('/api/admin/regions', authenticate, async (req, res) => {
-  const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
-  await auditLog(req.username, 'CREATE_REGION', 'REGION', req.body.name);
-  res.json(result.rows[0]);
+  try {
+    const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
+    await auditLog(req.username, 'CREATE_REGION', 'REGION', req.body.name);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create region' });
+  }
 });
 
 app.delete('/api/admin/regions/:id', authenticate, async (req, res) => {
-  const target = await pool.query('SELECT name FROM regions WHERE id = $1', [req.params.id]);
-  await pool.query('DELETE FROM regions WHERE id = $1', [req.params.id]);
-  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_REGION', 'REGION', target.rows[0].name);
-  res.json({ success: true });
+  try {
+    const target = await pool.query('SELECT name FROM regions WHERE id = $1::uuid', [req.params.id]);
+    await pool.query('DELETE FROM regions WHERE id = $1::uuid', [req.params.id]);
+    if (target.rowCount > 0) await auditLog(req.username, 'DELETE_REGION', 'REGION', target.rows[0].name);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete region' });
+  }
 });
 
 app.post('/api/admin/services', authenticate, async (req, res) => {
   const { regionId, name, description } = req.body;
-  const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', [regionId, name, description]);
-  await auditLog(req.username, 'CREATE_SERVICE', 'SERVICE', name);
-  res.json(result.rows[0]);
+  try {
+    const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1::uuid, $2, $3) RETURNING id, region_id AS "regionId", name, description', [regionId, name, description]);
+    await auditLog(req.username, 'CREATE_SERVICE', 'SERVICE', name);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create service' });
+  }
 });
 
 app.delete('/api/admin/services/:id', authenticate, async (req, res) => {
-  const target = await pool.query('SELECT name FROM services WHERE id = $1', [req.params.id]);
-  await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
-  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_SERVICE', 'SERVICE', target.rows[0].name);
-  res.json({ success: true });
+  try {
+    const target = await pool.query('SELECT name FROM services WHERE id = $1::uuid', [req.params.id]);
+    await pool.query('DELETE FROM services WHERE id = $1::uuid', [req.params.id]);
+    if (target.rowCount > 0) await auditLog(req.username, 'DELETE_SERVICE', 'SERVICE', target.rows[0].name);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete service' });
+  }
 });
 
 app.post('/api/admin/components', authenticate, async (req, res) => {
   const { serviceId, name, description } = req.body;
-  const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [serviceId, name, description]);
-  await auditLog(req.username, 'CREATE_COMPONENT', 'COMPONENT', name);
-  res.json(result.rows[0]);
+  try {
+    const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1::uuid, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', [serviceId, name, description]);
+    await auditLog(req.username, 'CREATE_COMPONENT', 'COMPONENT', name);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create component' });
+  }
 });
 
 app.delete('/api/admin/components/:id', authenticate, async (req, res) => {
-  const target = await pool.query('SELECT name FROM components WHERE id = $1', [req.params.id]);
-  await pool.query('DELETE FROM components WHERE id = $1', [req.params.id]);
-  if (target.rowCount > 0) await auditLog(req.username, 'DELETE_COMPONENT', 'COMPONENT', target.rows[0].name);
-  res.json({ success: true });
+  try {
+    const target = await pool.query('SELECT name FROM components WHERE id = $1::uuid', [req.params.id]);
+    await pool.query('DELETE FROM components WHERE id = $1::uuid', [req.params.id]);
+    if (target.rowCount > 0) await auditLog(req.username, 'DELETE_COMPONENT', 'COMPONENT', target.rows[0].name);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete component' });
+  }
 });
 
 app.post('/api/admin/users', authenticate, async (req, res) => {
@@ -309,11 +340,15 @@ app.post('/api/admin/users', authenticate, async (req, res) => {
 });
 
 app.delete('/api/admin/users/:id', authenticate, async (req, res) => {
-  const user = await pool.query('SELECT username FROM users WHERE id = $1', [req.params.id]);
-  if (user.rowCount === 0) return res.status(404).json({ error: 'Not found' });
-  await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
-  await auditLog(req.username, 'DELETE_USER', 'USER', user.rows[0].username);
-  res.json({ success: true });
+  try {
+    const user = await pool.query('SELECT username FROM users WHERE id = $1::uuid', [req.params.id]);
+    if (user.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    await pool.query('DELETE FROM users WHERE id = $1::uuid', [req.params.id]);
+    await auditLog(req.username, 'DELETE_USER', 'USER', user.rows[0].username);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
 });
 
 app.get('*', (req, res) => {

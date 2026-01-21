@@ -68,27 +68,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (state.isAuthenticated) fetchAdminData();
   }, [fetchData, fetchAdminData, state.isAuthenticated]);
 
-  const addRegion = async (name: string) => { await api.createRegion(name); await fetchData(); await fetchAdminData(); };
-  const removeRegion = async (id: string) => { await api.deleteRegion(id); await fetchData(); await fetchAdminData(); };
-  const addService = async (rid: string, n: string, d: string) => { await api.createService(rid, n, d); await fetchData(); await fetchAdminData(); };
-  const removeService = async (id: string) => { await api.deleteService(id); await fetchData(); await fetchAdminData(); };
-  const addComponent = async (sid: string, n: string, d: string) => { await api.createComponent(sid, n, d); await fetchData(); await fetchAdminData(); };
-  const removeComponent = async (id: string) => { await api.deleteComponent(id); await fetchData(); await fetchAdminData(); };
-  
-  const reportIncident = async (inc: any) => { await api.createIncident(inc); await fetchData(); await fetchAdminData(); };
-  const updateIncident = async (id: string, inc: any) => { await api.updateIncident(id, inc); await fetchData(); await fetchAdminData(); };
-  const resolveIncident = async (id: string) => { await api.resolveIncident(id); await fetchData(); await fetchAdminData(); };
+  const wrapAction = async (action: () => Promise<any>) => {
+    try {
+      await action();
+      await fetchData();
+      if (state.isAuthenticated) await fetchAdminData();
+    } catch (err) {
+      console.error("Infrastructure Action Failed:", err);
+      throw err;
+    }
+  };
 
-  const createAdmin = async (u: any) => { await api.createUser(u); await fetchAdminData(); };
-  const deleteAdmin = async (id: string) => { await api.deleteUser(id); await fetchAdminData(); };
+  const addRegion = (name: string) => wrapAction(() => api.createRegion(name));
+  const removeRegion = (id: string) => wrapAction(() => api.deleteRegion(id));
+  const addService = (rid: string, n: string, d: string) => wrapAction(() => api.createService(rid, n, d));
+  const removeService = (id: string) => wrapAction(() => api.deleteService(id));
+  const addComponent = (sid: string, n: string, d: string) => wrapAction(() => api.createComponent(sid, n, d));
+  const removeComponent = (id: string) => wrapAction(() => api.deleteComponent(id));
+  
+  const reportIncident = (inc: any) => wrapAction(() => api.createIncident(inc));
+  const updateIncident = (id: string, inc: any) => wrapAction(() => api.updateIncident(id, inc));
+  const resolveIncident = (id: string) => wrapAction(() => api.resolveIncident(id));
+
+  const createAdmin = async (u: any) => {
+    try {
+      await api.createUser(u);
+      await fetchAdminData();
+    } catch (err) {
+      console.error("Failed to create admin:", err);
+      throw err;
+    }
+  };
+
+  const deleteAdmin = async (id: string) => {
+    try {
+      await api.deleteUser(id);
+      await fetchAdminData();
+    } catch (err) {
+      console.error("Failed to delete admin:", err);
+      throw err;
+    }
+  };
 
   const login = async (cred: any) => {
     const { token, username } = await api.login(cred);
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, username);
     setState(prev => ({ ...prev, isAuthenticated: true, currentUser: username }));
-    fetchData();
-    fetchAdminData();
+    await fetchData();
+    await fetchAdminData();
   };
 
   const logout = () => {
@@ -113,7 +141,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const durationMs = incEnd - incStart;
         if (durationMs > 0) {
           const durationMinutes = durationMs / (1000 * 60);
-          // Outage is 100% impact, Degraded is 50% impact for SLA purposes
           const impactFactor = inc.severity === Severity.OUTAGE ? 1 : 0.5;
           totalDowntimeMinutes += durationMinutes * impactFactor;
         }
