@@ -187,10 +187,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
   const getActionColor = (type: string | undefined | null) => {
     if (!type) return 'text-gray-600 bg-gray-50';
-    if (type.startsWith('DELETE')) return 'text-red-600 bg-red-50';
-    if (type.startsWith('CREATE')) return 'text-indigo-600 bg-indigo-50';
-    if (type.includes('UPDATE')) return 'text-blue-600 bg-blue-50';
-    if (type.includes('RESOLVE')) return 'text-emerald-600 bg-emerald-50';
+    const t = String(type).toUpperCase();
+    if (t.startsWith('DELETE')) return 'text-red-600 bg-red-50';
+    if (t.startsWith('CREATE')) return 'text-indigo-600 bg-indigo-50';
+    if (t.includes('UPDATE')) return 'text-blue-600 bg-blue-50';
+    if (t.includes('RESOLVE')) return 'text-emerald-600 bg-emerald-50';
     return 'text-gray-600 bg-gray-50';
   };
 
@@ -370,12 +371,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                     <td className="px-6 py-4"><span className="font-bold text-gray-800">{log.username}</span></td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${getActionColor(log.actionType)}`}>
-                        {(log.actionType || 'UNKNOWN').replace('_', ' ')}
+                        {log.actionType ? log.actionType.replace('_', ' ') : 'UNKNOWN'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="font-bold text-gray-700 text-xs">{log.targetName}</span>
+                        <span className="font-bold text-gray-700 text-xs">{log.targetName || '-'}</span>
                         <span className="text-[10px] text-gray-400 italic mt-1">{formatAuditDetails(log.details)}</span>
                       </div>
                     </td>
