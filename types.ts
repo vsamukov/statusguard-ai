@@ -61,4 +61,5 @@ export interface AppState {
   auditLogs: AuditLog[];
   isAuthenticated: boolean;
   currentUser?: string;
+  timezoneOffset: number; // Offset in minutes from UTC (e.g., +120 for UTC+2)
 }

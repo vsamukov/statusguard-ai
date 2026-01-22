@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../store.tsx';
-import { Severity, Region, Service, Component, Incident } from '../types.ts';
+import { Severity, Incident } from '../types.ts';
 import { geminiService } from '../services/geminiService.ts';
 
 interface AdminDashboardProps {
@@ -21,7 +21,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   const [activeForm, setActiveForm] = useState<'region' | 'service' | 'component' | 'user' | null>(null);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
   
-  // Incident Reporting Drill-down state
   const [selRegionId, setSelRegionId] = useState('');
   const [selServiceId, setSelServiceId] = useState('');
   const [incidentForm, setIncidentForm] = useState({ 
@@ -34,36 +33,81 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     endTime: ''
   });
 
-  // Filtering for incident form
   const filteredServices = useMemo(() => state.services.filter(s => s.regionId === selRegionId), [state.services, selRegionId]);
   const filteredComponents = useMemo(() => state.components.filter(c => c.serviceId === selServiceId), [state.components, selServiceId]);
 
-  // Forms State
-  const [regionForm, setRegionForm] = useState({ id: '', name: '' });
-  const [serviceForm, setServiceForm] = useState({ id: '', regionId: '', name: '', description: '' });
-  const [compForm, setCompForm] = useState({ id: '', serviceId: '', name: '', description: '' });
+  const [regionForm, setRegionForm] = useState({ name: '' });
+  const [serviceForm, setServiceForm] = useState({ regionId: '', name: '', description: '' });
+  const [compForm, setCompForm] = useState({ serviceId: '', name: '', description: '' });
   const [userForm, setUserForm] = useState({ username: '', password: '' });
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
 
+  // Timezone Helpers
+  const formatInTz = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const adjustedDate = new Date(utc + (state.timezoneOffset * 60000));
+    return adjustedDate.toLocaleString(undefined, { 
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+    });
+  };
+
+  // Converts UTC string to local input format for the selected timezone
+  const toInputFormat = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const adjusted = new Date(utc + (state.timezoneOffset * 60000));
+    const year = adjusted.getFullYear();
+    const month = String(adjusted.getMonth() + 1).padStart(2, '0');
+    const day = String(adjusted.getDate()).padStart(2, '0');
+    const hours = String(adjusted.getHours()).padStart(2, '0');
+    const mins = String(adjusted.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${mins}`;
+  };
+
+  // Converts input value in selected timezone back to UTC string
+  const fromInputToUTC = (inputVal: string) => {
+    if (!inputVal) return null;
+    const local = new Date(inputVal); // browser treats it as local, we need to adjust
+    // We want the literal numbers from the input to be interpreted in the selected TZ
+    // Date constructor for 'YYYY-MM-DDTHH:mm' uses local system clock.
+    // To get UTC:
+    const year = local.getFullYear();
+    const month = local.getMonth();
+    const day = local.getDate();
+    const hours = local.getHours();
+    const mins = local.getMinutes();
+    
+    // Construct Date assuming these values are in our selected timezone
+    // The actual UTC timestamp would be: LocalTimeValues - selectedOffset
+    const dateInSelectedTz = Date.UTC(year, month, day, hours, mins);
+    const utcTime = dateInSelectedTz - (state.timezoneOffset * 60000);
+    return new Date(utcTime).toISOString();
+  };
+
   useEffect(() => {
-    if (activeTab === 'team' || activeTab === 'audit') {
-      fetchAdminData();
-    }
+    if (activeTab === 'team' || activeTab === 'audit') fetchAdminData();
     setActiveForm(null);
     resetFormsState();
   }, [activeTab]);
 
   const resetFormsState = () => {
-    setRegionForm({ id: '', name: '' });
-    setServiceForm({ id: '', regionId: '', name: '', description: '' });
-    setCompForm({ id: '', serviceId: '', name: '', description: '' });
+    setRegionForm({ name: '' });
+    setServiceForm({ regionId: '', name: '', description: '' });
+    setCompForm({ serviceId: '', name: '', description: '' });
     setUserForm({ username: '', password: '' });
     setSelRegionId('');
     setSelServiceId('');
     setEditingIncident(null);
-    setIncidentForm({ id: '', componentId: '', title: '', severity: Severity.DEGRADED, internalDesc: '', startTime: '', endTime: '' });
+    setIncidentForm({ 
+      id: '', componentId: '', title: '', severity: Severity.DEGRADED, 
+      internalDesc: '', 
+      startTime: toInputFormat(new Date().toISOString()), 
+      endTime: '' 
+    });
   };
 
   const handleEditIncident = (incident: Incident) => {
@@ -80,34 +124,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       title: incident.title,
       severity: incident.severity,
       internalDesc: incident.description,
-      startTime: new Date(incident.startTime).toISOString().slice(0, 16),
-      endTime: incident.endTime ? new Date(incident.endTime).toISOString().slice(0, 16) : ''
+      startTime: toInputFormat(incident.startTime),
+      endTime: incident.endTime ? toInputFormat(incident.endTime) : ''
     });
     setActiveTab('reporting');
   };
 
-  const handleAiSuggest = async () => {
-    if (!incidentForm.title || !incidentForm.internalDesc) {
-      alert("Please provide a title and some internal notes first.");
-      return;
-    }
-    setIsAiSuggesting(true);
-    try {
-      const summary = await geminiService.generateIncidentSummary(incidentForm.title, incidentForm.internalDesc);
-      setIncidentForm(prev => ({ ...prev, internalDesc: summary }));
-    } catch (err) {
-      console.error("Gemini suggestion failed:", err);
-    } finally {
-      setIsAiSuggesting(false);
-    }
-  };
-
   const handleSaveIncident = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!incidentForm.componentId) {
-      alert("Please select an impacted component.");
-      return;
-    }
+    if (!incidentForm.componentId) return alert("Select component");
     setIsProcessing(true);
     try {
       const payload = {
@@ -115,8 +140,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         title: incidentForm.title,
         severity: incidentForm.severity,
         description: incidentForm.internalDesc,
-        startTime: new Date(incidentForm.startTime || Date.now()).toISOString(),
-        endTime: incidentForm.endTime ? new Date(incidentForm.endTime).toISOString() : null
+        startTime: fromInputToUTC(incidentForm.startTime),
+        endTime: incidentForm.endTime ? fromInputToUTC(incidentForm.endTime) : null
       };
 
       if (editingIncident) {
@@ -125,25 +150,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         await reportIncident(payload);
       }
       resetFormsState();
-    } catch (error) {
-      console.error("Failed to save incident:", error);
+    } catch (error: any) {
+      alert("Failed to save incident: " + error.message);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userForm.username || !userForm.password) return;
+  const handleResolve = async (id: string) => {
+    if (!confirm("Resolve this incident?")) return;
     setIsProcessing(true);
     try {
-      await createAdmin(userForm);
-      setActiveForm(null);
-      resetFormsState();
-    } catch (err) {
-      alert("Failed to create user. It may already exist.");
+      await resolveIncident(id);
+    } catch (error: any) {
+      alert("Failed to resolve incident: " + error.message);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleAiSuggest = async () => {
+    if (!incidentForm.title || !incidentForm.internalDesc) return alert("Input title/notes");
+    setIsAiSuggesting(true);
+    try {
+      const summary = await geminiService.generateIncidentSummary(incidentForm.title, incidentForm.internalDesc);
+      setIncidentForm(prev => ({ ...prev, internalDesc: summary }));
+    } catch (err: any) { 
+      alert("AI Suggestion failed: " + err.message);
+    } finally { 
+      setIsAiSuggesting(false); 
     }
   };
 
@@ -157,21 +192,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
   const formatAuditDetails = (details: any) => {
     if (!details) return null;
-    // Handle the update incident diff
+    if (typeof details === 'string') return details;
     if (details.updated && details.previous) {
       const changes = [];
-      if (details.previous.componentId !== details.updated.componentId) changes.push('Reassigned Component');
       if (details.previous.severity !== details.updated.severity) changes.push(`Severity: ${details.previous.severity} → ${details.updated.severity}`);
-      if (details.previous.startTime !== details.updated.startTime) changes.push('Modified Start Date');
       if (details.previous.endTime !== details.updated.endTime) changes.push('Modified End Date');
-      return changes.length > 0 ? changes.join(' | ') : 'Internal description updated';
+      return changes.length > 0 ? changes.join(' | ') : 'Note update';
     }
-    // Default JSON display for simple objects
-    return typeof details === 'object' ? JSON.stringify(details) : details;
+    return JSON.stringify(details);
   };
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Voximplant Manager</h1>
@@ -190,8 +223,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
             ))}
           </nav>
           <div className="flex gap-2">
-            <button onClick={onViewPublic} className="px-3 py-1.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100">View Live</button>
-            <button onClick={logout} className="px-3 py-1.5 text-sm font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors">Logout</button>
+            <button onClick={onViewPublic} className="px-3 py-1.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg">View Live</button>
+            <button onClick={logout} className="px-3 py-1.5 text-sm font-bold text-red-500 hover:bg-red-50 rounded-lg">Logout</button>
           </div>
         </div>
       </div>
@@ -201,26 +234,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
           <div className="lg:col-span-2 space-y-6">
             <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold text-gray-800">
-                  {editingIncident ? 'Edit Incident Record' : 'Post Status Update'}
-                </h2>
+                <h2 className="text-lg font-bold text-gray-800">{editingIncident ? 'Edit Incident' : 'Report Incident'}</h2>
                 <div className="flex gap-2">
-                  {editingIncident && (
-                    <button 
-                      onClick={resetFormsState}
-                      className="px-3 py-1.5 bg-gray-50 text-gray-500 text-xs font-bold rounded-lg hover:bg-gray-100 border border-gray-200"
-                    >
-                      Cancel Edit
-                    </button>
-                  )}
-                  <button 
-                    type="button" 
-                    onClick={handleAiSuggest}
-                    disabled={isAiSuggesting || !incidentForm.internalDesc}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-all border border-indigo-100"
-                  >
-                    {isAiSuggesting ? 'Thinking...' : 'AI Refine'}
-                  </button>
+                   {editingIncident && <button onClick={resetFormsState} className="text-xs font-bold text-gray-400 hover:text-gray-600 uppercase">Cancel Edit</button>}
+                   <button onClick={handleAiSuggest} disabled={isAiSuggesting} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded hover:bg-indigo-100 border border-indigo-100">AI Refine</button>
                 </div>
               </div>
 
@@ -228,99 +245,64 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Region</label>
-                    <select 
-                      className="w-full border-gray-200 border p-2 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                      value={selRegionId} 
-                      onChange={e => { setSelRegionId(e.target.value); setSelServiceId(''); }}
-                    >
+                    <select className="w-full border p-2 rounded-lg text-sm bg-white outline-none" value={selRegionId} onChange={e => { setSelRegionId(e.target.value); setSelServiceId(''); }}>
                       <option value="">Select Region...</option>
                       {state.regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Service</label>
-                    <select 
-                      disabled={!selRegionId}
-                      className="w-full border-gray-200 border p-2 rounded-lg text-sm bg-white disabled:bg-gray-100 outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                      value={selServiceId} 
-                      onChange={e => setSelServiceId(e.target.value)}
-                    >
+                    <select disabled={!selRegionId} className="w-full border p-2 rounded-lg text-sm bg-white disabled:bg-gray-100 outline-none" value={selServiceId} onChange={e => setSelServiceId(e.target.value)}>
                       <option value="">Select Service...</option>
                       {filteredServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Component</label>
-                    <select 
-                      disabled={!selServiceId}
-                      required
-                      className="w-full border-gray-200 border p-2 rounded-lg text-sm bg-white disabled:bg-gray-100 outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                      value={incidentForm.componentId} 
-                      onChange={e => setIncidentForm(prev => ({...prev, componentId: e.target.value}))}
-                    >
-                      <option value="">Impacted node...</option>
+                    <select disabled={!selServiceId} required className="w-full border p-2 rounded-lg text-sm bg-white disabled:bg-gray-100 outline-none" value={incidentForm.componentId} onChange={e => setIncidentForm({...incidentForm, componentId: e.target.value})}>
+                      <option value="">Select Component...</option>
                       {filteredComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Severity</label>
-                    <select 
-                      className="w-full border-gray-200 border p-3 rounded-xl text-sm bg-white" 
-                      value={incidentForm.severity} 
-                      onChange={e => setIncidentForm({...incidentForm, severity: e.target.value as Severity})}
-                    >
-                      <option value={Severity.DEGRADED}>🟡 Degraded Performance</option>
-                      <option value={Severity.OUTAGE}>🔴 Major Outage</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Start Time</label>
-                    <input 
-                      type="datetime-local" 
-                      required
-                      className="w-full border-gray-200 border p-3 rounded-xl text-sm" 
-                      value={incidentForm.startTime} 
-                      onChange={e => setIncidentForm({...incidentForm, startTime: e.target.value})} 
-                    />
-                  </div>
+                   <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Severity</label>
+                      <select className="w-full border p-3 rounded-xl text-sm bg-white outline-none" value={incidentForm.severity} onChange={e => setIncidentForm({...incidentForm, severity: e.target.value as Severity})}>
+                        <option value={Severity.DEGRADED}>🟡 Degraded</option>
+                        <option value={Severity.OUTAGE}>🔴 Outage</option>
+                      </select>
+                   </div>
+                   <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Start Time (UTC{state.timezoneOffset >= 0 ? '+' : ''}{state.timezoneOffset/60})</label>
+                      <input type="datetime-local" required className="w-full border p-3 rounded-xl text-sm outline-none" value={incidentForm.startTime} onChange={e => setIncidentForm({...incidentForm, startTime: e.target.value})} />
+                   </div>
                 </div>
 
                 {editingIncident && (
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">End Time (Optional)</label>
-                    <input 
-                      type="datetime-local" 
-                      className="w-full border-gray-200 border p-3 rounded-xl text-sm" 
-                      value={incidentForm.endTime} 
-                      onChange={e => setIncidentForm({...incidentForm, endTime: e.target.value})} 
-                    />
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">End Time (UTC{state.timezoneOffset >= 0 ? '+' : ''}{state.timezoneOffset/60})</label>
+                    <input type="datetime-local" className="w-full border p-3 rounded-xl text-sm outline-none" value={incidentForm.endTime} onChange={e => setIncidentForm({...incidentForm, endTime: e.target.value})} />
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Public Headline</label>
-                  <input required placeholder="Headline..." className="w-full border-gray-200 border p-3 rounded-xl text-sm font-medium" value={incidentForm.title} onChange={e => setIncidentForm({...incidentForm, title: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Public Update / Notes</label>
-                  <textarea required placeholder="Details..." rows={4} className="w-full border-gray-200 border p-3 rounded-xl text-sm" value={incidentForm.internalDesc} onChange={e => setIncidentForm({...incidentForm, internalDesc: e.target.value})} />
-                </div>
-                <button disabled={isProcessing} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg disabled:bg-gray-400 transition-all">
-                  {isProcessing ? 'Saving...' : (editingIncident ? 'Update Incident Record' : 'Broadcast Status Update')}
+                <input required placeholder="Incident Title" className="w-full border p-3 rounded-xl text-sm font-medium outline-none" value={incidentForm.title} onChange={e => setIncidentForm({...incidentForm, title: e.target.value})} />
+                <textarea required placeholder="Public description..." rows={4} className="w-full border p-3 rounded-xl text-sm outline-none" value={incidentForm.internalDesc} onChange={e => setIncidentForm({...incidentForm, internalDesc: e.target.value})} />
+                
+                <button disabled={isProcessing} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg disabled:bg-gray-400 transition-all flex items-center justify-center gap-2">
+                  {isProcessing && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
+                  {editingIncident ? 'Update Incident' : 'Broadcast Update'}
                 </button>
               </form>
             </section>
           </div>
+
           <aside className="space-y-6">
-             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm sticky top-8">
+             <div className="bg-white p-6 rounded-xl border border-gray-200 sticky top-8 shadow-sm">
                <h3 className="font-bold text-sm mb-4 border-b pb-2 flex items-center justify-between">
-                 <span className="flex items-center gap-2">
-                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                   Active Now
-                 </span>
+                 <span>Active Now</span>
+                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                </h3>
                <div className="space-y-3">
                  {state.incidents.filter(i => !i.endTime).map(inc => (
@@ -331,8 +313,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                           {inc.severity}
                         </span>
                         <div className="flex gap-2">
-                          <button onClick={() => handleEditIncident(inc)} className="text-[10px] font-bold text-indigo-600 hover:underline">Edit</button>
-                          <button onClick={() => resolveIncident(inc.id)} className="text-[10px] font-bold text-emerald-600 hover:underline">Resolve</button>
+                           <button onClick={() => handleEditIncident(inc)} className="text-[10px] font-bold text-indigo-600 hover:underline">Edit</button>
+                           <button onClick={() => handleResolve(inc.id)} disabled={isProcessing} className="text-[10px] font-bold text-emerald-600 hover:underline disabled:opacity-50">
+                             Resolve
+                           </button>
                         </div>
                      </div>
                    </div>
@@ -342,23 +326,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
              </div>
 
              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-               <h3 className="font-bold text-sm mb-4 border-b pb-2">Recently Resolved</h3>
-               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+               <h3 className="font-bold text-sm mb-4 border-b pb-2">Recent History</h3>
+               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                  {state.incidents.filter(i => i.endTime).slice(0, 10).map(inc => (
-                    <div key={inc.id} className="p-3 bg-white hover:bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-center group transition-colors">
-                      <div className="truncate pr-2">
+                   <div key={inc.id} className="p-3 bg-white hover:bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-center group transition-colors">
+                     <div className="truncate pr-2">
                         <p className="text-[10px] font-bold text-gray-700 truncate">{inc.title}</p>
-                        <div className="flex flex-col gap-0.5 mt-1">
-                          <p className="text-[8px] text-gray-400 flex items-center gap-1">
-                            <span className="font-semibold text-gray-500">Reported:</span> {new Date(inc.startTime).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                          <p className="text-[8px] text-gray-400 flex items-center gap-1">
-                            <span className="font-semibold text-emerald-600">Resolved:</span> {inc.endTime ? new Date(inc.endTime).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
-                          </p>
-                        </div>
-                      </div>
-                      <button onClick={() => handleEditIncident(inc)} className="text-[9px] font-bold text-gray-400 hover:text-indigo-600 shrink-0">EDIT</button>
-                    </div>
+                        <p className="text-[9px] text-gray-400">
+                          {formatInTz(inc.startTime)}
+                        </p>
+                     </div>
+                     <button onClick={() => handleEditIncident(inc)} className="text-[9px] font-bold text-gray-400 hover:text-indigo-600">EDIT</button>
+                   </div>
                  ))}
                </div>
              </div>
@@ -379,13 +358,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                   <th className="px-6 py-3 font-bold text-gray-400 uppercase text-[9px] tracking-[0.2em]">Timestamp</th>
                   <th className="px-6 py-3 font-bold text-gray-400 uppercase text-[9px] tracking-[0.2em]">Operator</th>
                   <th className="px-6 py-3 font-bold text-gray-400 uppercase text-[9px] tracking-[0.2em]">Action</th>
-                  <th className="px-6 py-3 font-bold text-gray-400 uppercase text-[9px] tracking-[0.2em]">Target & Changes</th>
+                  <th className="px-6 py-3 font-bold text-gray-400 uppercase text-[9px] tracking-[0.2em]">Summary</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {state.auditLogs.map(log => (
                   <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">{new Date(log.createdAt).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">{formatInTz(log.createdAt)}</td>
                     <td className="px-6 py-4"><span className="font-bold text-gray-800">{log.username}</span></td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${getActionColor(log.actionType)}`}>
@@ -395,9 +374,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="font-bold text-gray-700 text-xs">{log.targetName}</span>
-                        <span className="text-[10px] text-gray-400 font-medium italic mt-0.5">
-                          {formatAuditDetails(log.details)}
-                        </span>
+                        <span className="text-[10px] text-gray-400 italic mt-1">{formatAuditDetails(log.details)}</span>
                       </div>
                     </td>
                   </tr>
@@ -412,8 +389,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
           </div>
         </div>
       )}
-
-      {/* Configuration, Team tabs remain logically similar to original but with refresh fixes */}
+      
       {activeTab === 'configuration' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
           <div className="lg:col-span-2 space-y-6">
@@ -437,7 +413,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                             <button onClick={() => removeComponent(comp.id)} className="text-red-500 hover:underline font-bold opacity-0 group-hover:opacity-100 transition-opacity">Delete</button>
                           </div>
                         ))}
-                        <button onClick={() => { setActiveForm('component'); setCompForm(p => ({...p, serviceId: service.id})); }} className="text-[10px] text-indigo-600 font-bold uppercase mt-2">+ Add Component</button>
+                        <button onClick={() => { setActiveForm('component'); setCompForm(p => ({...p, serviceId: service.id})); }} className="text-[10px] text-indigo-600 font-bold uppercase mt-2 hover:text-indigo-800 transition-colors">+ Add Component</button>
                       </div>
                     </div>
                   ))}
@@ -445,29 +421,62 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                 </div>
               </div>
             ))}
-            <button onClick={() => setActiveForm('region')} className="w-full py-6 border-2 border-dashed border-indigo-100 rounded-2xl text-sm font-bold text-indigo-400 hover:bg-indigo-50">+ New Region</button>
+            <button onClick={() => setActiveForm('region')} className="w-full py-6 border-2 border-dashed border-indigo-100 rounded-2xl text-sm font-bold text-indigo-400 hover:bg-indigo-50 transition-all">+ New Region</button>
           </div>
           <aside className="sticky top-8 space-y-4">
                {activeForm === 'region' && (
-                  <div className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsProcessing(true);
+                    try {
+                      await addRegion(regionForm.name);
+                      setActiveForm(null);
+                      resetFormsState();
+                    } catch(err) { alert("Failed to add region"); }
+                    finally { setIsProcessing(false); }
+                  }} className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
                     <h3 className="font-bold mb-4">New Region</h3>
-                    <input className="w-full border p-3 rounded-xl text-sm mb-4 outline-none" value={regionForm.name} onChange={e => setRegionForm({...regionForm, name: e.target.value})} placeholder="Region Name" />
-                    <button onClick={() => { addRegion(regionForm.name); setActiveForm(null); }} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Save</button>
-                  </div>
+                    <input required className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={regionForm.name} onChange={e => setRegionForm({...regionForm, name: e.target.value})} placeholder="Region Name" />
+                    <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex justify-center items-center">
+                      {isProcessing ? 'Saving...' : 'Save Region'}
+                    </button>
+                  </form>
                )}
                {activeForm === 'service' && (
-                  <div className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsProcessing(true);
+                    try {
+                      await addService(serviceForm.regionId, serviceForm.name, '');
+                      setActiveForm(null);
+                      resetFormsState();
+                    } catch(err) { alert("Failed to add service"); }
+                    finally { setIsProcessing(false); }
+                  }} className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
                     <h3 className="font-bold mb-4">New Service</h3>
-                    <input className="w-full border p-3 rounded-xl text-sm mb-4" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} placeholder="Service Name" />
-                    <button onClick={() => { addService(serviceForm.regionId, serviceForm.name, ''); setActiveForm(null); }} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Save</button>
-                  </div>
+                    <input required className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} placeholder="Service Name" />
+                    <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex justify-center items-center">
+                      {isProcessing ? 'Saving...' : 'Save Service'}
+                    </button>
+                  </form>
                )}
                {activeForm === 'component' && (
-                  <div className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsProcessing(true);
+                    try {
+                      await addComponent(compForm.serviceId, compForm.name, '');
+                      setActiveForm(null);
+                      resetFormsState();
+                    } catch(err) { alert("Failed to add component"); }
+                    finally { setIsProcessing(false); }
+                  }} className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
                     <h3 className="font-bold mb-4">New Component</h3>
-                    <input className="w-full border p-3 rounded-xl text-sm mb-4" value={compForm.name} onChange={e => setCompForm({...compForm, name: e.target.value})} placeholder="Component Name" />
-                    <button onClick={() => { addComponent(compForm.serviceId, compForm.name, ''); setActiveForm(null); }} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Save</button>
-                  </div>
+                    <input required className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={compForm.name} onChange={e => setCompForm({...compForm, name: e.target.value})} placeholder="Component Name" />
+                    <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex justify-center items-center">
+                      {isProcessing ? 'Saving...' : 'Save Component'}
+                    </button>
+                  </form>
                )}
           </aside>
         </div>
@@ -504,10 +513,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
           <aside>
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
               <h3 className="font-bold text-lg mb-4">Provision Admin</h3>
-              <form onSubmit={handleCreateUser} className="space-y-4">
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setIsProcessing(true);
+                try {
+                  await createAdmin(userForm);
+                  resetFormsState();
+                } catch(err) { alert("Failed to create admin"); }
+                finally { setIsProcessing(false); }
+              }} className="space-y-4">
                 <input required className="w-full border p-3 rounded-xl text-sm outline-none" value={userForm.username} onChange={e => setUserForm({...userForm, username: e.target.value})} placeholder="Username" />
                 <input required type="password" className="w-full border p-3 rounded-xl text-sm outline-none" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} placeholder="Password" />
-                <button disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Create Account</button>
+                <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">
+                  {isProcessing ? 'Creating...' : 'Create Account'}
+                </button>
               </form>
             </div>
           </aside>

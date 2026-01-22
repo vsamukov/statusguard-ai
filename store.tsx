@@ -21,14 +21,20 @@ interface AppContextType {
   logout: () => void;
   fetchAdminData: () => Promise<void>;
   calculateSLA: (componentId: string, days?: number) => number;
+  setTimezoneOffset: (offset: number) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const TOKEN_KEY = 'voximplant_status_token';
 const USER_KEY = 'voximplant_status_user';
+const TZ_KEY = 'voximplant_status_tz';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Default to system timezone offset if not saved
+  const savedTz = localStorage.getItem(TZ_KEY);
+  const initialOffset = savedTz !== null ? parseInt(savedTz, 10) : (new Date().getTimezoneOffset() * -1);
+
   const [state, setState] = useState<AppState>({
     regions: [],
     services: [],
@@ -38,6 +44,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     auditLogs: [],
     isAuthenticated: !!localStorage.getItem(TOKEN_KEY),
     currentUser: localStorage.getItem(USER_KEY) || undefined,
+    timezoneOffset: initialOffset,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -73,7 +80,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const wrapAction = async (action: () => Promise<any>) => {
     try {
       await action();
-      // Ensure we await both fetches to guarantee UI sync
       await Promise.all([
         fetchData(),
         state.isAuthenticated ? fetchAdminData() : Promise.resolve()
@@ -112,6 +118,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, isAuthenticated: false, currentUser: undefined }));
   };
 
+  const setTimezoneOffset = (offset: number) => {
+    localStorage.setItem(TZ_KEY, offset.toString());
+    setState(prev => ({ ...prev, timezoneOffset: offset }));
+  };
+
   const calculateSLA = useCallback((componentId: string, days = 90) => {
     const now = Date.now();
     const periodStart = now - (days * 24 * 60 * 60 * 1000);
@@ -143,7 +154,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       state, isLoading, addRegion, removeRegion, addService, 
       removeService, addComponent, removeComponent,
       reportIncident, updateIncident, resolveIncident, createAdmin, deleteAdmin, login, logout, fetchAdminData,
-      calculateSLA
+      calculateSLA, setTimezoneOffset
     }}>
       {children}
     </AppContext.Provider>

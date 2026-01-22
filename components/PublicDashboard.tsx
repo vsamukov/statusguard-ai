@@ -7,6 +7,19 @@ import UptimeGraph from './UptimeGraph.tsx';
 const PublicDashboard: React.FC = () => {
   const { state, calculateSLA } = useApp();
 
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const adjustedDate = new Date(utc + (state.timezoneOffset * 60000));
+    return adjustedDate.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   const getComponentStatus = (componentId: string) => {
     const activeIncidents = state.incidents.filter(i => i.componentId === componentId && !i.endTime);
     if (activeIncidents.find(i => i.severity === Severity.OUTAGE)) return Severity.OUTAGE;
@@ -57,7 +70,7 @@ const PublicDashboard: React.FC = () => {
                 </div>
                 <p className="text-gray-600 mb-4">{incident.description}</p>
                 <div className="text-xs text-gray-400">
-                  Detected: {new Date(incident.startTime).toLocaleString()}
+                  Detected: {formatDate(incident.startTime)}
                 </div>
               </div>
             ))}
