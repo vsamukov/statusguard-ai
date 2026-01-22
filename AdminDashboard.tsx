@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../store.tsx';
 import { Severity, Incident } from '../types.ts';
@@ -44,6 +43,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
 
+  // Timezone Helpers
+  const formatInTz = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+      const adjustedDate = new Date(utc + (state.timezoneOffset * 60000));
+      return adjustedDate.toLocaleString(undefined, { 
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+      });
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
+  // Converts UTC string to local input format for the selected timezone
+  const toInputFormat = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const adjusted = new Date(utc + (state.timezoneOffset * 60000));
+    const year = adjusted.getFullYear();
+    const month = String(adjusted.getMonth() + 1).padStart(2, '0');
+    const day = String(adjusted.getDate()).padStart(2, '0');
+    const hours = String(adjusted.getHours()).padStart(2, '0');
+    const mins = String(adjusted.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${mins}`;
+  };
+
+  // Converts input value in selected timezone back to UTC string
+  const fromInputToUTC = (inputVal: string) => {
+    if (!inputVal) return null;
+    const local = new Date(inputVal);
+    const year = local.getFullYear();
+    const month = local.getMonth();
+    const day = local.getDate();
+    const hours = local.getHours();
+    const mins = local.getMinutes();
+    
+    // Construct Date assuming these values are in our selected timezone
+    const dateInSelectedTz = Date.UTC(year, month, day, hours, mins);
+    const utcTime = dateInSelectedTz - (state.timezoneOffset * 60000);
+    return new Date(utcTime).toISOString();
+  };
+
   useEffect(() => {
     if (activeTab === 'team' || activeTab === 'audit') fetchAdminData();
     setActiveForm(null);
@@ -58,7 +102,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     setSelRegionId('');
     setSelServiceId('');
     setEditingIncident(null);
-    setIncidentForm({ id: '', componentId: '', title: '', severity: Severity.DEGRADED, internalDesc: '', startTime: '', endTime: '' });
+    setIncidentForm({ 
+      id: '', 
+      componentId: '', 
+      title: '', 
+      severity: Severity.DEGRADED, 
+      internalDesc: '', 
+      startTime: toInputFormat(new Date().toISOString()), 
+      endTime: '' 
+    });
   };
 
   const handleEditIncident = (incident: Incident) => {
@@ -75,8 +127,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       title: incident.title,
       severity: incident.severity,
       internalDesc: incident.description,
-      startTime: incident.startTime ? new Date(incident.startTime).toISOString().slice(0, 16) : '',
-      endTime: incident.endTime ? new Date(incident.endTime).toISOString().slice(0, 16) : ''
+      startTime: toInputFormat(incident.startTime),
+      endTime: incident.endTime ? toInputFormat(incident.endTime) : ''
     });
     setActiveTab('reporting');
   };
@@ -91,8 +143,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         title: incidentForm.title,
         severity: incidentForm.severity,
         description: incidentForm.internalDesc,
-        startTime: incidentForm.startTime ? new Date(incidentForm.startTime).toISOString() : new Date().toISOString(),
-        endTime: incidentForm.endTime ? new Date(incidentForm.endTime).toISOString() : null
+        startTime: fromInputToUTC(incidentForm.startTime),
+        endTime: incidentForm.endTime ? fromInputToUTC(incidentForm.endTime) : null
       };
 
       if (editingIncident) {
@@ -133,7 +185,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     }
   };
 
-  const getActionColor = (type: string) => {
+  const getActionColor = (type: string | undefined | null) => {
+    if (!type) return 'text-gray-600 bg-gray-50';
     if (type.startsWith('DELETE')) return 'text-red-600 bg-red-50';
     if (type.startsWith('CREATE')) return 'text-indigo-600 bg-indigo-50';
     if (type.includes('UPDATE')) return 'text-blue-600 bg-blue-50';
@@ -226,14 +279,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                       </select>
                    </div>
                    <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Start Time</label>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Start Time (UTC{state.timezoneOffset >= 0 ? '+' : ''}{state.timezoneOffset/60})</label>
                       <input type="datetime-local" required className="w-full border p-3 rounded-xl text-sm outline-none" value={incidentForm.startTime} onChange={e => setIncidentForm({...incidentForm, startTime: e.target.value})} />
                    </div>
                 </div>
 
                 {editingIncident && (
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">End Time (optional)</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">End Time (UTC{state.timezoneOffset >= 0 ? '+' : ''}{state.timezoneOffset/60})</label>
                     <input type="datetime-local" className="w-full border p-3 rounded-xl text-sm outline-none" value={incidentForm.endTime} onChange={e => setIncidentForm({...incidentForm, endTime: e.target.value})} />
                   </div>
                 )}
@@ -283,7 +336,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                    <div key={inc.id} className="p-3 bg-white hover:bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-center group transition-colors">
                      <div className="truncate pr-2">
                         <p className="text-[10px] font-bold text-gray-700 truncate">{inc.title}</p>
-                        <p className="text-[9px] text-gray-400">{new Date(inc.startTime).toLocaleDateString()}</p>
+                        <p className="text-[9px] text-gray-400">{formatInTz(inc.startTime)}</p>
                      </div>
                      <button onClick={() => handleEditIncident(inc)} className="text-[9px] font-bold text-gray-400 hover:text-indigo-600">EDIT</button>
                    </div>
@@ -313,11 +366,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
               <tbody className="divide-y divide-gray-50">
                 {state.auditLogs.map(log => (
                   <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">{new Date(log.createdAt).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">{formatInTz(log.createdAt)}</td>
                     <td className="px-6 py-4"><span className="font-bold text-gray-800">{log.username}</span></td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${getActionColor(log.actionType)}`}>
-                        {log.actionType.replace('_', ' ')}
+                        {(log.actionType || 'UNKNOWN').replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
