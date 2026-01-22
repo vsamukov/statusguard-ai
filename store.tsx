@@ -1,6 +1,6 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { AppState, Severity, AdminUser, AuditLog, Incident } from './types.ts';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { AppState, Severity } from './types.ts';
 import { api } from './services/api.ts';
 
 interface AppContextType {
@@ -42,39 +42,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
     try {
       const data = await api.getStatus();
       setState(prev => ({ ...prev, ...data }));
     } catch (err) {
       console.error("Failed to fetch status map", err);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
   const fetchAdminData = useCallback(async () => {
-    if (!state.isAuthenticated) return;
+    if (!localStorage.getItem(TOKEN_KEY)) return;
     try {
       const data = await api.getAdminData();
       setState(prev => ({ ...prev, ...data }));
     } catch (err) {
       console.error("Failed to fetch admin info", err);
     }
-  }, [state.isAuthenticated]);
+  }, []);
 
   useEffect(() => {
-    fetchData();
-    if (state.isAuthenticated) fetchAdminData();
+    const init = async () => {
+      setIsLoading(true);
+      await fetchData();
+      if (state.isAuthenticated) await fetchAdminData();
+      setIsLoading(false);
+    };
+    init();
   }, [fetchData, fetchAdminData, state.isAuthenticated]);
 
   const wrapAction = async (action: () => Promise<any>) => {
     try {
       await action();
-      await fetchData();
-      if (state.isAuthenticated) await fetchAdminData();
+      // Ensure we await both fetches to guarantee UI sync
+      await Promise.all([
+        fetchData(),
+        state.isAuthenticated ? fetchAdminData() : Promise.resolve()
+      ]);
     } catch (err) {
-      console.error("Infrastructure Action Failed:", err);
+      console.error("Action Execution Failed:", err);
       throw err;
     }
   };
@@ -90,33 +95,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateIncident = (id: string, inc: any) => wrapAction(() => api.updateIncident(id, inc));
   const resolveIncident = (id: string) => wrapAction(() => api.resolveIncident(id));
 
-  const createAdmin = async (u: any) => {
-    try {
-      await api.createUser(u);
-      await fetchAdminData();
-    } catch (err) {
-      console.error("Failed to create admin:", err);
-      throw err;
-    }
-  };
-
-  const deleteAdmin = async (id: string) => {
-    try {
-      await api.deleteUser(id);
-      await fetchAdminData();
-    } catch (err) {
-      console.error("Failed to delete admin:", err);
-      throw err;
-    }
-  };
+  const createAdmin = (u: any) => wrapAction(() => api.createUser(u));
+  const deleteAdmin = (id: string) => wrapAction(() => api.deleteUser(id));
 
   const login = async (cred: any) => {
     const { token, username } = await api.login(cred);
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, username);
     setState(prev => ({ ...prev, isAuthenticated: true, currentUser: username }));
-    await fetchData();
-    await fetchAdminData();
+    await Promise.all([fetchData(), fetchAdminData()]);
   };
 
   const logout = () => {

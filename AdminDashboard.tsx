@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../store.tsx';
-import { Severity, Region, Service, Component, Incident } from '../types.ts';
+import { Severity, Incident } from '../types.ts';
 import { geminiService } from '../services/geminiService.ts';
 
 interface AdminDashboardProps {
@@ -36,9 +36,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   const filteredServices = useMemo(() => state.services.filter(s => s.regionId === selRegionId), [state.services, selRegionId]);
   const filteredComponents = useMemo(() => state.components.filter(c => c.serviceId === selServiceId), [state.components, selServiceId]);
 
-  const [regionForm, setRegionForm] = useState({ id: '', name: '' });
-  const [serviceForm, setServiceForm] = useState({ id: '', regionId: '', name: '', description: '' });
-  const [compForm, setCompForm] = useState({ id: '', serviceId: '', name: '', description: '' });
+  const [regionForm, setRegionForm] = useState({ name: '' });
+  const [serviceForm, setServiceForm] = useState({ regionId: '', name: '', description: '' });
+  const [compForm, setCompForm] = useState({ serviceId: '', name: '', description: '' });
   const [userForm, setUserForm] = useState({ username: '', password: '' });
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -51,9 +51,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   }, [activeTab]);
 
   const resetFormsState = () => {
-    setRegionForm({ id: '', name: '' });
-    setServiceForm({ id: '', regionId: '', name: '', description: '' });
-    setCompForm({ id: '', serviceId: '', name: '', description: '' });
+    setRegionForm({ name: '' });
+    setServiceForm({ regionId: '', name: '', description: '' });
+    setCompForm({ serviceId: '', name: '', description: '' });
     setUserForm({ username: '', password: '' });
     setSelRegionId('');
     setSelServiceId('');
@@ -109,7 +109,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   };
 
   const handleResolve = async (id: string) => {
-    if (!confirm("Are you sure you want to resolve this incident?")) return;
+    if (!confirm("Resolve this incident?")) return;
     setIsProcessing(true);
     try {
       await resolveIncident(id);
@@ -146,11 +146,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     if (typeof details === 'string') return details;
     if (details.updated && details.previous) {
       const changes = [];
-      if (details.previous.componentId !== details.updated.componentId) changes.push('Reassigned Node');
       if (details.previous.severity !== details.updated.severity) changes.push(`Severity: ${details.previous.severity} → ${details.updated.severity}`);
-      if (details.previous.startTime !== details.updated.startTime) changes.push('Modified Start Date');
       if (details.previous.endTime !== details.updated.endTime) changes.push('Modified End Date');
-      return changes.length > 0 ? changes.join(' | ') : 'Internal note update';
+      return changes.length > 0 ? changes.join(' | ') : 'Note update';
     }
     return JSON.stringify(details);
   };
@@ -267,7 +265,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                         </span>
                         <div className="flex gap-2">
                            <button onClick={() => handleEditIncident(inc)} className="text-[10px] font-bold text-indigo-600 hover:underline">Edit</button>
-                           <button onClick={() => handleResolve(inc.id)} className="text-[10px] font-bold text-emerald-600 hover:underline">Resolve</button>
+                           <button onClick={() => handleResolve(inc.id)} disabled={isProcessing} className="text-[10px] font-bold text-emerald-600 hover:underline disabled:opacity-50">
+                             Resolve
+                           </button>
                         </div>
                      </div>
                    </div>
@@ -374,26 +374,110 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
           </div>
           <aside className="sticky top-8 space-y-4">
                {activeForm === 'region' && (
-                  <div className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsProcessing(true);
+                    try {
+                      await addRegion(regionForm.name);
+                      setActiveForm(null);
+                      resetFormsState();
+                    } catch(err) { alert("Failed to add region"); }
+                    finally { setIsProcessing(false); }
+                  }} className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
                     <h3 className="font-bold mb-4">New Region</h3>
-                    <input className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={regionForm.name} onChange={e => setRegionForm({...regionForm, name: e.target.value})} placeholder="Region Name" />
-                    <button onClick={() => { addRegion(regionForm.name).then(() => setActiveForm(null)); }} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Save</button>
-                  </div>
+                    <input required className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={regionForm.name} onChange={e => setRegionForm({...regionForm, name: e.target.value})} placeholder="Region Name" />
+                    <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex justify-center items-center">
+                      {isProcessing ? 'Saving...' : 'Save Region'}
+                    </button>
+                  </form>
                )}
                {activeForm === 'service' && (
-                  <div className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsProcessing(true);
+                    try {
+                      await addService(serviceForm.regionId, serviceForm.name, '');
+                      setActiveForm(null);
+                      resetFormsState();
+                    } catch(err) { alert("Failed to add service"); }
+                    finally { setIsProcessing(false); }
+                  }} className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
                     <h3 className="font-bold mb-4">New Service</h3>
-                    <input className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} placeholder="Service Name" />
-                    <button onClick={() => { addService(serviceForm.regionId, serviceForm.name, '').then(() => setActiveForm(null)); }} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Save</button>
-                  </div>
+                    <input required className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} placeholder="Service Name" />
+                    <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex justify-center items-center">
+                      {isProcessing ? 'Saving...' : 'Save Service'}
+                    </button>
+                  </form>
                )}
                {activeForm === 'component' && (
-                  <div className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setIsProcessing(true);
+                    try {
+                      await addComponent(compForm.serviceId, compForm.name, '');
+                      setActiveForm(null);
+                      resetFormsState();
+                    } catch(err) { alert("Failed to add component"); }
+                    finally { setIsProcessing(false); }
+                  }} className="bg-white p-6 rounded-2xl border-2 border-indigo-500 shadow-xl animate-in zoom-in-95">
                     <h3 className="font-bold mb-4">New Component</h3>
-                    <input className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={compForm.name} onChange={e => setCompForm({...compForm, name: e.target.value})} placeholder="Component Name" />
-                    <button onClick={() => { addComponent(compForm.serviceId, compForm.name, '').then(() => setActiveForm(null)); }} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Save</button>
-                  </div>
+                    <input required className="w-full border p-3 rounded-xl text-sm mb-4 outline-none focus:border-indigo-500" value={compForm.name} onChange={e => setCompForm({...compForm, name: e.target.value})} placeholder="Component Name" />
+                    <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex justify-center items-center">
+                      {isProcessing ? 'Saving...' : 'Save Component'}
+                    </button>
+                  </form>
                )}
+          </aside>
+        </div>
+      )}
+
+      {activeTab === 'team' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Username</th>
+                    <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Role</th>
+                    <th className="px-6 py-4"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {state.users.map(user => (
+                    <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-gray-800">{user.username}</td>
+                      <td className="px-6 py-4"><span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-full">ADMIN</span></td>
+                      <td className="px-6 py-4 text-right pr-6">
+                        {user.username !== state.currentUser && (
+                          <button onClick={() => deleteAdmin(user.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase tracking-tighter">Remove</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <aside>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+              <h3 className="font-bold text-lg mb-4">Provision Admin</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setIsProcessing(true);
+                try {
+                  await createAdmin(userForm);
+                  resetFormsState();
+                } catch(err) { alert("Failed to create admin"); }
+                finally { setIsProcessing(false); }
+              }} className="space-y-4">
+                <input required className="w-full border p-3 rounded-xl text-sm outline-none" value={userForm.username} onChange={e => setUserForm({...userForm, username: e.target.value})} placeholder="Username" />
+                <input required type="password" className="w-full border p-3 rounded-xl text-sm outline-none" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} placeholder="Password" />
+                <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">
+                  {isProcessing ? 'Creating...' : 'Create Account'}
+                </button>
+              </form>
+            </div>
           </aside>
         </div>
       )}
