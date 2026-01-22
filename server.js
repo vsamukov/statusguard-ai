@@ -146,17 +146,19 @@ const initDb = async () => {
 // PUBLIC: Status Map
 app.get('/api/status', async (req, res) => {
   try {
-    const [regions, services, components, incidents] = await Promise.all([
+    const [regions, services, components, incidents, templates] = await Promise.all([
       pool.query('SELECT id, name FROM regions ORDER BY name'),
       pool.query('SELECT id, region_id AS "regionId", name, description FROM services ORDER BY name'),
       pool.query('SELECT id, service_id AS "serviceId", name, description, created_at AS "createdAt" FROM components ORDER BY name'),
       pool.query('SELECT id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime" FROM incidents ORDER BY start_time DESC'),
+      pool.query('SELECT id, component_id AS "componentId", name, title, description FROM templates ORDER BY name'),
     ]);
     res.json({
       regions: regions.rows,
       services: services.rows,
       components: components.rows,
-      incidents: incidents.rows
+      incidents: incidents.rows,
+      templates: templates.rows
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -194,6 +196,39 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ADMIN: Templates
+app.post('/api/admin/templates', authenticate, async (req, res) => {
+  const { componentId, name, title, description } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO templates (component_id, name, title, description) VALUES ($1, $2, $3, $4) RETURNING id, component_id AS "componentId", name, title, description', 
+      [componentId, name, title, description]
+    );
+    await logAudit(req.user, 'CREATE_TEMPLATE', 'TEMPLATE', name);
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/admin/templates/:id', authenticate, async (req, res) => {
+  const { name, title, description } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'UPDATE templates SET name=$1, title=$2, description=$3 WHERE id=$4 RETURNING id, component_id AS "componentId", name, title, description',
+      [name, title, description, req.params.id]
+    );
+    await logAudit(req.user, 'UPDATE_TEMPLATE', 'TEMPLATE', name);
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/templates/:id', authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM templates WHERE id = $1 RETURNING name', [req.params.id]);
+    if (rows.length > 0) await logAudit(req.user, 'DELETE_TEMPLATE', 'TEMPLATE', rows[0].name);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ADMIN: Regions

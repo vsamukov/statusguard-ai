@@ -26,6 +26,14 @@ export interface Component {
   createdAt?: string;
 }
 
+export interface Template {
+  id: string;
+  componentId: string;
+  name: string;
+  title: string;
+  description: string;
+}
+
 export interface Incident {
   id: string;
   componentId: string;
@@ -56,10 +64,11 @@ export interface AppState {
   regions: Region[];
   services: Service[];
   components: Component[];
+  templates: Template[];
   incidents: Incident[];
   users: AdminUser[];
   auditLogs: AuditLog[];
   isAuthenticated: boolean;
   currentUser?: string;
-  timezoneOffset: number; // Offset in minutes from UTC (e.g., +120 for UTC+2)
+  timezoneOffset: number; // Offset in minutes from UTC
 }

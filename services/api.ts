@@ -42,6 +42,34 @@ export const api = {
     return handleResponse(res);
   },
 
+  // Templates
+  async createTemplate(template: any) {
+    const res = await fetch(`${API_BASE}/admin/templates`, { 
+      method: 'POST', 
+      headers: getHeaders(), 
+      body: JSON.stringify(template) 
+    });
+    return handleResponse(res);
+  },
+
+  async updateTemplate(id: string, template: any) {
+    const res = await fetch(`${API_BASE}/admin/templates/${id}`, { 
+      method: 'PUT', 
+      headers: getHeaders(), 
+      body: JSON.stringify(template) 
+    });
+    return handleResponse(res);
+  },
+
+  async deleteTemplate(id: string) {
+    const res = await fetch(`${API_BASE}/admin/templates/${id}`, { 
+      method: 'DELETE', 
+      headers: getHeaders() 
+    });
+    return handleResponse(res);
+  },
+
+  // Regions & Services...
   async createUser(user: any) {
     const res = await fetch(`${API_BASE}/admin/users`, { 
       method: 'POST', 

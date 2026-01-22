@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppState, Severity } from './types.ts';
+import { AppState, Severity, Template } from './types.ts';
 import { api } from './services/api.ts';
 
 interface AppContextType {
@@ -12,6 +12,9 @@ interface AppContextType {
   removeService: (id: string) => Promise<void>;
   addComponent: (serviceId: string, name: string, description: string) => Promise<void>;
   removeComponent: (id: string) => Promise<void>;
+  addTemplate: (template: any) => Promise<void>;
+  updateTemplate: (id: string, template: any) => Promise<void>;
+  removeTemplate: (id: string) => Promise<void>;
   reportIncident: (incident: any) => Promise<void>;
   updateIncident: (id: string, incident: any) => Promise<void>;
   resolveIncident: (incidentId: string) => Promise<void>;
@@ -38,6 +41,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     regions: [],
     services: [],
     components: [],
+    templates: [],
     incidents: [],
     users: [],
     auditLogs: [],
@@ -108,6 +112,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addComponent = (sid: string, n: string, d: string) => wrapAction(() => api.createComponent(sid, n, d));
   const removeComponent = (id: string) => wrapAction(() => api.deleteComponent(id));
   
+  const addTemplate = (t: any) => wrapAction(() => api.createTemplate(t));
+  const updateTemplate = (id: string, t: any) => wrapAction(() => api.updateTemplate(id, t));
+  const removeTemplate = (id: string) => wrapAction(() => api.deleteTemplate(id));
+
   const reportIncident = (inc: any) => wrapAction(() => api.createIncident(inc));
   const updateIncident = (id: string, inc: any) => wrapAction(() => api.updateIncident(id, inc));
   const resolveIncident = (id: string) => wrapAction(() => api.resolveIncident(id));
@@ -162,6 +170,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       state, isLoading, addRegion, removeRegion, addService, 
       removeService, addComponent, removeComponent,
+      addTemplate, updateTemplate, removeTemplate,
       reportIncident, updateIncident, resolveIncident, createAdmin, deleteAdmin, login, logout, fetchAdminData,
       calculateSLA, setTimezoneOffset
     }}>
