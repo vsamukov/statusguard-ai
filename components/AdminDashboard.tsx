@@ -343,14 +343,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                <h3 className="font-bold text-sm mb-4 border-b pb-2">Recently Resolved</h3>
-               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                  {state.incidents.filter(i => i.endTime).slice(0, 10).map(inc => (
                     <div key={inc.id} className="p-3 bg-white hover:bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-center group transition-colors">
                       <div className="truncate pr-2">
                         <p className="text-[10px] font-bold text-gray-700 truncate">{inc.title}</p>
-                        <p className="text-[9px] text-gray-400">{new Date(inc.startTime).toLocaleDateString()}</p>
+                        <div className="flex flex-col gap-0.5 mt-1">
+                          <p className="text-[8px] text-gray-400 flex items-center gap-1">
+                            <span className="font-semibold text-gray-500">Reported:</span> {new Date(inc.startTime).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          <p className="text-[8px] text-gray-400 flex items-center gap-1">
+                            <span className="font-semibold text-emerald-600">Resolved:</span> {inc.endTime ? new Date(inc.endTime).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                          </p>
+                        </div>
                       </div>
-                      <button onClick={() => handleEditIncident(inc)} className="text-[9px] font-bold text-gray-400 hover:text-indigo-600">EDIT</button>
+                      <button onClick={() => handleEditIncident(inc)} className="text-[9px] font-bold text-gray-400 hover:text-indigo-600 shrink-0">EDIT</button>
                     </div>
                  ))}
                </div>
