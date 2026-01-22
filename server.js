@@ -36,7 +36,7 @@ const verifyPassword = (password, storedValue) => {
 /**
  * AUTHENTICATION MIDDLEWARE
  */
-const sessions = new Map(); // token -> username (In-memory for simplicity, but logs are persistent)
+const sessions = new Map();
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -98,7 +98,6 @@ async function logAudit(username, actionType, targetType, targetName, details = 
       'INSERT INTO audit_logs (username, action_type, target_type, target_name, details) VALUES ($1, $2, $3, $4, $5)',
       [username, actionType, targetType, targetName, JSON.stringify(details)]
     );
-    console.log(`[AUDIT] ${username} performed ${actionType} on ${targetType}:${targetName}`);
   } catch (err) {
     console.error('[AUDIT ERROR]', err);
   }
@@ -131,8 +130,6 @@ const initDb = async () => {
       if (rowCount === 0 && fs.existsSync(seedFile)) {
         console.log('[VOXIMPLANT] Empty database detected. Seeding initial data...');
         await client.query(fs.readFileSync(seedFile, 'utf8'));
-      } else {
-        console.log('[VOXIMPLANT] Database already contains data. Skipping seed.');
       }
     } finally {
       client.release();
@@ -150,10 +147,10 @@ const initDb = async () => {
 app.get('/api/status', async (req, res) => {
   try {
     const [regions, services, components, incidents] = await Promise.all([
-      pool.query('SELECT * FROM regions ORDER BY name'),
-      pool.query('SELECT * FROM services ORDER BY name'),
-      pool.query('SELECT * FROM components ORDER BY name'),
-      pool.query('SELECT * FROM incidents ORDER BY start_time DESC'),
+      pool.query('SELECT id, name FROM regions ORDER BY name'),
+      pool.query('SELECT id, region_id AS "regionId", name, description FROM services ORDER BY name'),
+      pool.query('SELECT id, service_id AS "serviceId", name, description, created_at AS "createdAt" FROM components ORDER BY name'),
+      pool.query('SELECT id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime" FROM incidents ORDER BY start_time DESC'),
     ]);
     res.json({
       regions: regions.rows,
@@ -176,7 +173,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
     const token = crypto.randomBytes(32).toString('hex');
     sessions.set(token, username);
-    await logAudit(username, 'LOGIN', 'USER', username, { method: 'password' });
+    await logAudit(username, 'LOGIN', 'USER', username);
     res.json({ token, username });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -187,8 +184,8 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/admin/data', authenticate, async (req, res) => {
   try {
     const [users, auditLogs] = await Promise.all([
-      pool.query('SELECT id, username, created_at FROM users ORDER BY username'),
-      pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100'),
+      pool.query('SELECT id, username, created_at AS "createdAt" FROM users ORDER BY username'),
+      pool.query('SELECT id, username, action_type AS "actionType", target_type AS "targetType", target_name AS "targetName", details, created_at AS "createdAt" FROM audit_logs ORDER BY created_at DESC LIMIT 100'),
     ]);
     res.json({
       users: users.rows,
@@ -203,8 +200,8 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
 app.post('/api/admin/regions', authenticate, async (req, res) => {
   const { name } = req.body;
   try {
-    const { rows } = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [name]);
-    await logAudit(req.user, 'CREATE_REGION', 'REGION', name, rows[0]);
+    const { rows } = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING id, name', [name]);
+    await logAudit(req.user, 'CREATE_REGION', 'REGION', name);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -222,10 +219,10 @@ app.post('/api/admin/services', authenticate, async (req, res) => {
   const { regionId, name, description } = req.body;
   try {
     const { rows } = await pool.query(
-      'INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING *', 
+      'INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', 
       [regionId, name, description]
     );
-    await logAudit(req.user, 'CREATE_SERVICE', 'SERVICE', name, rows[0]);
+    await logAudit(req.user, 'CREATE_SERVICE', 'SERVICE', name);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -243,10 +240,10 @@ app.post('/api/admin/components', authenticate, async (req, res) => {
   const { serviceId, name, description } = req.body;
   try {
     const { rows } = await pool.query(
-      'INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING *', 
+      'INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', 
       [serviceId, name, description]
     );
-    await logAudit(req.user, 'CREATE_COMPONENT', 'COMPONENT', name, rows[0]);
+    await logAudit(req.user, 'CREATE_COMPONENT', 'COMPONENT', name);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -264,10 +261,10 @@ app.post('/api/admin/incidents', authenticate, async (req, res) => {
   const { componentId, title, description, severity, startTime, endTime } = req.body;
   try {
     const { rows } = await pool.query(
-      'INSERT INTO incidents (component_id, title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *', 
+      'INSERT INTO incidents (component_id, title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"', 
       [componentId, title, description, severity, startTime, endTime]
     );
-    await logAudit(req.user, 'CREATE_INCIDENT', 'INCIDENT', title, rows[0]);
+    await logAudit(req.user, 'CREATE_INCIDENT', 'INCIDENT', title);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -275,12 +272,11 @@ app.post('/api/admin/incidents', authenticate, async (req, res) => {
 app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
   const { title, description, severity, startTime, endTime, componentId } = req.body;
   try {
-    const prev = await pool.query('SELECT * FROM incidents WHERE id = $1', [req.params.id]);
     const { rows } = await pool.query(
-      'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING *',
+      'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime"',
       [title, description, severity, startTime, endTime, componentId, req.params.id]
     );
-    await logAudit(req.user, 'UPDATE_INCIDENT', 'INCIDENT', title, { previous: prev.rows[0], updated: rows[0] });
+    await logAudit(req.user, 'UPDATE_INCIDENT', 'INCIDENT', title);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -301,7 +297,7 @@ app.post('/api/admin/users', authenticate, async (req, res) => {
   const { username, password } = req.body;
   try {
     const hash = hashPassword(password);
-    const { rows } = await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, created_at', [username, hash]);
+    const { rows } = await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, created_at AS "createdAt"', [username, hash]);
     await logAudit(req.user, 'CREATE_USER', 'USER', username);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: 'Username already exists' }); }

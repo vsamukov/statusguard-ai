@@ -31,7 +31,6 @@ const USER_KEY = 'voximplant_status_user';
 const TZ_KEY = 'voximplant_status_tz';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Default to system timezone offset if not saved
   const savedTz = localStorage.getItem(TZ_KEY);
   const initialOffset = savedTz !== null ? parseInt(savedTz, 10) : (new Date().getTimezoneOffset() * -1);
 
@@ -138,16 +137,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let totalDowntimeMinutes = 0;
 
     componentIncidents.forEach(inc => {
-      const incStart = Math.max(new Date(inc.startTime).getTime(), periodStart);
-      const incEnd = inc.endTime ? new Date(inc.endTime).getTime() : now;
+      if (!inc.startTime) return;
+      const start = new Date(inc.startTime).getTime();
+      const end = inc.endTime ? new Date(inc.endTime).getTime() : now;
 
-      if (incEnd > periodStart) {
+      if (isNaN(start) || (inc.endTime && isNaN(end))) return;
+
+      const incStart = Math.max(start, periodStart);
+      const incEnd = Math.min(end, now);
+
+      if (incEnd > periodStart && incEnd > incStart) {
         const durationMs = incEnd - incStart;
-        if (durationMs > 0) {
-          const durationMinutes = durationMs / (1000 * 60);
-          const impactFactor = inc.severity === Severity.OUTAGE ? 1 : 0.5;
-          totalDowntimeMinutes += durationMinutes * impactFactor;
-        }
+        const durationMinutes = durationMs / (1000 * 60);
+        const impactFactor = inc.severity === Severity.OUTAGE ? 1 : 0.5;
+        totalDowntimeMinutes += durationMinutes * impactFactor;
       }
     });
 

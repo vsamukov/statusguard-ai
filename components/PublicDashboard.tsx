@@ -7,17 +7,23 @@ import UptimeGraph from './UptimeGraph.tsx';
 const PublicDashboard: React.FC = () => {
   const { state, calculateSLA } = useApp();
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-    const adjustedDate = new Date(utc + (state.timezoneOffset * 60000));
-    return adjustedDate.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return 'Invalid Date';
+      const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+      const adjustedDate = new Date(utc + (state.timezoneOffset * 60000));
+      return adjustedDate.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return 'Error Parsing Date';
+    }
   };
 
   const getComponentStatus = (componentId: string) => {
@@ -42,7 +48,7 @@ const PublicDashboard: React.FC = () => {
     if (statuses.includes(Severity.OUTAGE)) return { label: 'System Outage', color: 'bg-red-600', sub: 'Major disruptions are occurring' };
     if (statuses.includes(Severity.DEGRADED)) return { label: 'Partial Degradation', color: 'bg-yellow-500', sub: 'Some services are experiencing issues' };
     return { label: 'All Systems Operational', color: 'bg-emerald-500', sub: 'Services are running optimally' };
-  }, [state]);
+  }, [state, state.incidents, state.components]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
