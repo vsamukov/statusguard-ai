@@ -48,6 +48,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setState(prev => ({ ...prev, isAuthenticated: false, currentUser: undefined, auditLogs: [], users: [] }));
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       const data = await api.getStatus();
@@ -62,10 +68,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const data = await api.getAdminData();
       setState(prev => ({ ...prev, ...data }));
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized')) {
+        logout();
+      }
       console.error("Failed to fetch admin info", err);
     }
-  }, []);
+  }, [logout]);
 
   useEffect(() => {
     const init = async () => {
@@ -84,8 +93,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchData(),
         state.isAuthenticated ? fetchAdminData() : Promise.resolve()
       ]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Action Execution Failed:", err);
+      if (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized')) {
+        logout();
+      }
       throw err;
     }
   };
@@ -110,12 +122,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(USER_KEY, username);
     setState(prev => ({ ...prev, isAuthenticated: true, currentUser: username }));
     await Promise.all([fetchData(), fetchAdminData()]);
-  };
-
-  const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setState(prev => ({ ...prev, isAuthenticated: false, currentUser: undefined }));
   };
 
   const setTimezoneOffset = (offset: number) => {
