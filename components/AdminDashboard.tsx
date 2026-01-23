@@ -37,12 +37,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
   const filteredServices = useMemo(() => state.services.filter(s => s.regionId === selRegionId), [state.services, selRegionId]);
   const filteredComponents = useMemo(() => state.components.filter(c => c.serviceId === selServiceId), [state.components, selServiceId]);
-  const componentTemplates = useMemo(() => state.templates.filter(t => t.componentId === incidentForm.componentId), [state.templates, incidentForm.componentId]);
+  
+  // Logic to find templates based on the name of the selected component
+  const componentTemplates = useMemo(() => {
+    const selectedComp = state.components.find(c => c.id === incidentForm.componentId);
+    if (!selectedComp) return [];
+    // FIX: Using componentName instead of componentId as per Template interface
+    return state.templates.filter(t => t.componentName === selectedComp.name);
+  }, [state.templates, incidentForm.componentId, state.components]);
+
+  // Unique component names for the template editor
+  const uniqueComponentNames = useMemo(() => {
+    const names = new Set(state.components.map(c => c.name));
+    return Array.from(names).sort();
+  }, [state.components]);
 
   const [regionForm, setRegionForm] = useState({ name: '' });
   const [serviceForm, setServiceForm] = useState({ regionId: '', name: '', description: '' });
   const [compForm, setCompForm] = useState({ serviceId: '', name: '', description: '' });
-  const [templateForm, setTemplateForm] = useState({ componentId: '', name: '', title: '', description: '' });
+  // FIX: Using componentName instead of componentId to match Template interface
+  const [templateForm, setTemplateForm] = useState({ componentName: '', name: '', title: '', description: '' });
   const [userForm, setUserForm] = useState({ username: '', password: '' });
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -99,7 +113,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     setRegionForm({ name: '' });
     setServiceForm({ regionId: '', name: '', description: '' });
     setCompForm({ serviceId: '', name: '', description: '' });
-    setTemplateForm({ componentId: '', name: '', title: '', description: '' });
+    // FIX: Using componentName instead of componentId
+    setTemplateForm({ componentName: '', name: '', title: '', description: '' });
     setUserForm({ username: '', password: '' });
     setSelRegionId('');
     setSelServiceId('');
@@ -176,7 +191,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
   const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!templateForm.componentId) return alert("Select component");
+    // FIX: Using componentName instead of componentId
+    if (!templateForm.componentName) return alert("Select component name");
     setIsProcessing(true);
     try {
       if (editingTemplate) {
@@ -377,18 +393,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                  <thead className="bg-gray-50 border-b border-gray-200">
                    <tr>
                      <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Template Name</th>
-                     <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Component</th>
+                     <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Component Name</th>
                      <th className="px-6 py-4"></th>
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-gray-100">
                     {state.templates.map(t => {
-                      const comp = state.components.find(c => c.id === t.componentId);
+                      // FIX for Line 386: Template uses componentName instead of componentId
                       return (
                         <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 font-bold text-gray-800">{t.name}</td>
-                          <td className="px-6 py-4 text-xs text-gray-500 font-medium">{comp?.name || 'Unassigned'}</td>
+                          <td className="px-6 py-4 text-xs text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">{t.componentName}</td>
                           <td className="px-6 py-4 text-right pr-6 space-x-3">
+                            {/* FIX for Line 392: setTemplateForm now handles componentName */}
                             <button onClick={() => { setEditingTemplate(t); setTemplateForm({ ...t }); setActiveForm('template'); }} className="text-indigo-600 hover:underline text-xs font-bold uppercase">Edit</button>
                             <button onClick={() => { if(confirm('Delete template?')) removeTemplate(t.id); }} className="text-red-500 hover:underline text-xs font-bold uppercase">Delete</button>
                           </td>
@@ -403,7 +420,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                  </tbody>
                </table>
              </div>
-             <button onClick={() => { setActiveForm('template'); setEditingTemplate(null); setTemplateForm({ componentId: '', name: '', title: '', description: '' }); }} className="w-full py-6 border-2 border-dashed border-indigo-100 rounded-2xl text-sm font-bold text-indigo-400 hover:bg-indigo-50 transition-all">+ New Template</button>
+             <button onClick={() => { setActiveForm('template'); setEditingTemplate(null); setTemplateForm({ componentName: '', name: '', title: '', description: '' }); }} className="w-full py-6 border-2 border-dashed border-indigo-100 rounded-2xl text-sm font-bold text-indigo-400 hover:bg-indigo-50 transition-all">+ New Template</button>
            </div>
            <aside className="sticky top-8">
              {activeForm === 'template' && (
@@ -414,10 +431,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                   </h3>
                   <form onSubmit={handleSaveTemplate} className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Target Component</label>
-                      <select required className="w-full border p-2 rounded-lg text-sm bg-white outline-none focus:border-indigo-500" value={templateForm.componentId} onChange={e => setTemplateForm({...templateForm, componentId: e.target.value})}>
-                        <option value="">Select component...</option>
-                        {state.components.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Target Component Name</label>
+                      <select required className="w-full border p-2 rounded-lg text-sm bg-white outline-none focus:border-indigo-500" value={templateForm.componentName} onChange={e => setTemplateForm({...templateForm, componentName: e.target.value})}>
+                        <option value="">Select component name...</option>
+                        {uniqueComponentNames.map(name => <option key={name} value={name}>{name}</option>)}
                       </select>
                     </div>
                     <div>
@@ -442,7 +459,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
              )}
              {!activeForm && (
                <div className="p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
-                 <p className="text-xs text-indigo-700 leading-relaxed font-medium">Templates help maintain consistency in public communication. Associate them with components to quickly populate incident reports during outages.</p>
+                 <p className="text-xs text-indigo-700 leading-relaxed font-medium">Templates help maintain consistency in public communication. Associate them with components by name to quickly populate incident reports during outages.</p>
                </div>
              )}
            </aside>

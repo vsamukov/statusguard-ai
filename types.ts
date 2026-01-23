@@ -28,7 +28,7 @@ export interface Component {
 
 export interface Template {
   id: string;
-  componentId: string;
+  componentName: string;
   name: string;
   title: string;
   description: string;

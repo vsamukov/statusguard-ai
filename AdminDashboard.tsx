@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../store.tsx';
 import { Severity, Incident, Template } from '../types.ts';
@@ -36,12 +37,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
   const filteredServices = useMemo(() => state.services.filter(s => s.regionId === selRegionId), [state.services, selRegionId]);
   const filteredComponents = useMemo(() => state.components.filter(c => c.serviceId === selServiceId), [state.components, selServiceId]);
-  const componentTemplates = useMemo(() => state.templates.filter(t => t.componentId === incidentForm.componentId), [state.templates, incidentForm.componentId]);
+  
+  // Logic to find templates based on the name of the selected component
+  const componentTemplates = useMemo(() => {
+    const selectedComp = state.components.find(c => c.id === incidentForm.componentId);
+    if (!selectedComp) return [];
+    return state.templates.filter(t => t.componentName === selectedComp.name);
+  }, [state.templates, incidentForm.componentId, state.components]);
+
+  // Unique component names for the template editor
+  const uniqueComponentNames = useMemo(() => {
+    const names = new Set(state.components.map(c => c.name));
+    return Array.from(names).sort();
+  }, [state.components]);
 
   const [regionForm, setRegionForm] = useState({ name: '' });
   const [serviceForm, setServiceForm] = useState({ regionId: '', name: '', description: '' });
   const [compForm, setCompForm] = useState({ serviceId: '', name: '', description: '' });
-  const [templateForm, setTemplateForm] = useState({ componentId: '', name: '', title: '', description: '' });
+  const [templateForm, setTemplateForm] = useState({ componentName: '', name: '', title: '', description: '' });
   const [userForm, setUserForm] = useState({ username: '', password: '' });
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -98,7 +111,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     setRegionForm({ name: '' });
     setServiceForm({ regionId: '', name: '', description: '' });
     setCompForm({ serviceId: '', name: '', description: '' });
-    setTemplateForm({ componentId: '', name: '', title: '', description: '' });
+    setTemplateForm({ componentName: '', name: '', title: '', description: '' });
     setUserForm({ username: '', password: '' });
     setSelRegionId('');
     setSelServiceId('');
@@ -175,7 +188,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
   const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!templateForm.componentId) return alert("Select component");
+    if (!templateForm.componentName) return alert("Select component name");
     setIsProcessing(true);
     try {
       if (editingTemplate) {
@@ -294,7 +307,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
                 {componentTemplates.length > 0 && (
                    <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex items-center justify-between animate-in slide-in-from-top-1">
-                     <span className="text-xs font-bold text-indigo-600 uppercase tracking-tighter">Available Templates</span>
+                     <div className="flex flex-col">
+                       <span className="text-xs font-bold text-indigo-600 uppercase tracking-tighter">Common Templates</span>
+                       <span className="text-[10px] text-indigo-400">Available globally for this component name</span>
+                     </div>
                      <select 
                       className="text-xs border rounded bg-white px-2 py-1 outline-none font-medium" 
                       onChange={(e) => applyTemplate(e.target.value)}
@@ -376,33 +392,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                  <thead className="bg-gray-50 border-b border-gray-200">
                    <tr>
                      <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Template Name</th>
-                     <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Component</th>
+                     <th className="px-6 py-4 font-bold text-gray-400 uppercase text-[10px] tracking-widest">Target Component Name</th>
                      <th className="px-6 py-4"></th>
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-gray-100">
-                    {state.templates.map(t => {
-                      const comp = state.components.find(c => c.id === t.componentId);
-                      return (
-                        <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-gray-800">{t.name}</td>
-                          <td className="px-6 py-4 text-xs text-gray-500 font-medium">{comp?.name || 'Unassigned'}</td>
-                          <td className="px-6 py-4 text-right pr-6 space-x-3">
-                            <button onClick={() => { setEditingTemplate(t); setTemplateForm({ ...t }); setActiveForm('template'); }} className="text-indigo-600 hover:underline text-xs font-bold uppercase">Edit</button>
-                            <button onClick={() => { if(confirm('Delete template?')) removeTemplate(t.id); }} className="text-red-500 hover:underline text-xs font-bold uppercase">Delete</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {state.templates.map(t => (
+                      <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 font-bold text-gray-800">{t.name}</td>
+                        <td className="px-6 py-4">
+                          <span className="text-xs text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                            {t.componentName}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right pr-6 space-x-3">
+                          <button onClick={() => { setEditingTemplate(t); setTemplateForm({ ...t }); setActiveForm('template'); }} className="text-indigo-600 hover:underline text-xs font-bold uppercase">Edit</button>
+                          <button onClick={() => { if(confirm('Delete template?')) removeTemplate(t.id); }} className="text-red-500 hover:underline text-xs font-bold uppercase">Delete</button>
+                        </td>
+                      </tr>
+                    ))}
                     {state.templates.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="px-6 py-12 text-center text-gray-400 italic">No templates defined yet. Define patterns for common failures.</td>
+                        <td colSpan={3} className="px-6 py-12 text-center text-gray-400 italic">No templates defined. Templates are now associated globally by component name.</td>
                       </tr>
                     )}
                  </tbody>
                </table>
              </div>
-             <button onClick={() => { setActiveForm('template'); setEditingTemplate(null); setTemplateForm({ componentId: '', name: '', title: '', description: '' }); }} className="w-full py-6 border-2 border-dashed border-indigo-100 rounded-2xl text-sm font-bold text-indigo-400 hover:bg-indigo-50 transition-all">+ New Template</button>
+             <button onClick={() => { setActiveForm('template'); setEditingTemplate(null); setTemplateForm({ componentName: '', name: '', title: '', description: '' }); }} className="w-full py-6 border-2 border-dashed border-indigo-100 rounded-2xl text-sm font-bold text-indigo-400 hover:bg-indigo-50 transition-all">+ New Global Template</button>
            </div>
            <aside className="sticky top-8">
              {activeForm === 'template' && (
@@ -413,11 +430,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                   </h3>
                   <form onSubmit={handleSaveTemplate} className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Target Component</label>
-                      <select required className="w-full border p-2 rounded-lg text-sm bg-white outline-none focus:border-indigo-500" value={templateForm.componentId} onChange={e => setTemplateForm({...templateForm, componentId: e.target.value})}>
-                        <option value="">Select component...</option>
-                        {state.components.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Target Component Name</label>
+                      <select required className="w-full border p-2 rounded-lg text-sm bg-white outline-none focus:border-indigo-500" value={templateForm.componentName} onChange={e => setTemplateForm({...templateForm, componentName: e.target.value})}>
+                        <option value="">Select component name...</option>
+                        {uniqueComponentNames.map(name => <option key={name} value={name}>{name}</option>)}
                       </select>
+                      <p className="text-[9px] text-gray-400 mt-1 italic">Templates will appear for ALL components with this exact name.</p>
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Internal Name</label>
@@ -441,7 +459,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
              )}
              {!activeForm && (
                <div className="p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
-                 <p className="text-xs text-indigo-700 leading-relaxed font-medium">Templates help maintain consistency in public communication. Associate them with components to quickly populate incident reports during outages.</p>
+                 <p className="text-xs text-indigo-700 leading-relaxed font-medium">Templates are now name-based. This means a single template can cover "Load Balancer" components across all your clusters and regions automatically.</p>
                </div>
              )}
            </aside>

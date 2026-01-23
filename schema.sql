@@ -35,10 +35,10 @@ CREATE TABLE IF NOT EXISTS components (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Templates table
+-- Templates table (associated by name)
 CREATE TABLE IF NOT EXISTS templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    component_id UUID REFERENCES components(id) ON DELETE CASCADE,
+    component_name TEXT NOT NULL,
     name TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_services_region ON services(region_id);
 CREATE INDEX IF NOT EXISTS idx_components_service ON components(service_id);
-CREATE INDEX IF NOT EXISTS idx_templates_component ON templates(component_id);
+CREATE INDEX IF NOT EXISTS idx_templates_component_name ON templates(component_name);
 CREATE INDEX IF NOT EXISTS idx_incidents_component ON incidents(component_id);
 CREATE INDEX IF NOT EXISTS idx_incidents_active ON incidents(end_time) WHERE end_time IS NULL;
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);

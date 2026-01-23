@@ -151,7 +151,7 @@ app.get('/api/status', async (req, res) => {
       pool.query('SELECT id, region_id AS "regionId", name, description FROM services ORDER BY name'),
       pool.query('SELECT id, service_id AS "serviceId", name, description, created_at AS "createdAt" FROM components ORDER BY name'),
       pool.query('SELECT id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime" FROM incidents ORDER BY start_time DESC'),
-      pool.query('SELECT id, component_id AS "componentId", name, title, description FROM templates ORDER BY name'),
+      pool.query('SELECT id, component_name AS "componentName", name, title, description FROM templates ORDER BY name'),
     ]);
     res.json({
       regions: regions.rows,
@@ -200,11 +200,11 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
 
 // ADMIN: Templates
 app.post('/api/admin/templates', authenticate, async (req, res) => {
-  const { componentId, name, title, description } = req.body;
+  const { componentName, name, title, description } = req.body;
   try {
     const { rows } = await pool.query(
-      'INSERT INTO templates (component_id, name, title, description) VALUES ($1, $2, $3, $4) RETURNING id, component_id AS "componentId", name, title, description', 
-      [componentId, name, title, description]
+      'INSERT INTO templates (component_name, name, title, description) VALUES ($1, $2, $3, $4) RETURNING id, component_name AS "componentName", name, title, description', 
+      [componentName, name, title, description]
     );
     await logAudit(req.user, 'CREATE_TEMPLATE', 'TEMPLATE', name);
     res.json(rows[0]);
@@ -212,11 +212,11 @@ app.post('/api/admin/templates', authenticate, async (req, res) => {
 });
 
 app.put('/api/admin/templates/:id', authenticate, async (req, res) => {
-  const { name, title, description } = req.body;
+  const { name, title, description, componentName } = req.body;
   try {
     const { rows } = await pool.query(
-      'UPDATE templates SET name=$1, title=$2, description=$3 WHERE id=$4 RETURNING id, component_id AS "componentId", name, title, description',
-      [name, title, description, req.params.id]
+      'UPDATE templates SET name=$1, title=$2, description=$3, component_name=$4 WHERE id=$5 RETURNING id, component_name AS "componentName", name, title, description',
+      [name, title, description, componentName, req.params.id]
     );
     await logAudit(req.user, 'UPDATE_TEMPLATE', 'TEMPLATE', name);
     res.json(rows[0]);
