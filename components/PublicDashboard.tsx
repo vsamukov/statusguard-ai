@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useApp } from '../store.tsx';
-import { Severity } from '../types.ts';
+import { Severity, Incident } from '../types.ts';
 import UptimeGraph from './UptimeGraph.tsx';
 
 const PublicDashboard: React.FC = () => {
@@ -24,6 +24,17 @@ const PublicDashboard: React.FC = () => {
     } catch (e) {
       return 'Error Parsing Date';
     }
+  };
+
+  const formatSimpleDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    const adjustedDate = new Date(utc + (state.timezoneOffset * 60000));
+    return adjustedDate.toLocaleDateString(undefined, {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
   const getComponentStatus = (componentId: string) => {
@@ -49,6 +60,25 @@ const PublicDashboard: React.FC = () => {
     if (statuses.includes(Severity.DEGRADED)) return { label: 'Partial Degradation', color: 'bg-yellow-500', sub: 'Some services are experiencing issues' };
     return { label: 'All Systems Operational', color: 'bg-emerald-500', sub: 'Services are running optimally' };
   }, [state, state.incidents, state.components]);
+
+  // Logic for Past Incidents (90 days)
+  const pastIncidentsByDate = React.useMemo(() => {
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    
+    const filtered = state.incidents
+      .filter(i => new Date(i.startTime) >= ninetyDaysAgo)
+      .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+
+    const groups: { [date: string]: Incident[] } = {};
+    filtered.forEach(inc => {
+      const dateKey = formatSimpleDate(inc.startTime);
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(inc);
+    });
+
+    return groups;
+  }, [state.incidents, state.timezoneOffset]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
@@ -84,7 +114,8 @@ const PublicDashboard: React.FC = () => {
         </div>
       )}
 
-      <div className="space-y-12">
+      {/* Current System Status */}
+      <div className="space-y-12 mb-16">
         {state.regions.map(region => (
           <div key={region.id}>
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-6 border-b pb-2">{region.name}</h2>
@@ -145,6 +176,69 @@ const PublicDashboard: React.FC = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Past Incidents Section */}
+      <div className="mt-20">
+        <h2 className="text-2xl font-bold text-gray-900 mb-8 border-b pb-4">Incident History (Past 90 Days)</h2>
+        
+        {Object.keys(pastIncidentsByDate).length > 0 ? (
+          <div className="space-y-10">
+            {Object.entries(pastIncidentsByDate).map(([date, incidents]) => (
+              <div key={date}>
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">{date}</h3>
+                <div className="space-y-4">
+                  {incidents.map(incident => {
+                    const comp = state.components.find(c => c.id === incident.componentId);
+                    return (
+                      <div key={incident.id} className="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-bold text-gray-800">{incident.title}</h4>
+                            <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-tight">Component: {comp?.name || 'Unknown'}</p>
+                          </div>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                            incident.severity === Severity.OUTAGE ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
+                          }`}>
+                            {incident.severity}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4">{incident.description}</p>
+                        <div className="flex gap-4 text-[10px] font-medium text-gray-400 border-t pt-3">
+                          <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+                            Started: {formatDate(incident.startTime)}
+                          </span>
+                          {incident.endTime ? (
+                            <span className="flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300"></span>
+                              Resolved: {formatDate(incident.endTime)}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>
+                              Ongoing
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white border border-gray-100 rounded-xl p-12 text-center">
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 mb-1">No incidents reported</h3>
+            <p className="text-gray-500 text-sm">All systems were operational during the past 90 days.</p>
+          </div>
+        )}
       </div>
     </div>
   );
