@@ -1,6 +1,17 @@
-
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Migration: Detect and fix old templates table structure if necessary
+DO $$ 
+BEGIN 
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'templates') THEN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='templates' AND column_name='component_id') THEN
+            -- Dropping the table to allow the new schema definition to take effect.
+            -- This ensures the templates table matches the new name-based logic.
+            DROP TABLE templates CASCADE;
+        END IF;
+    END IF;
+END $$;
 
 -- Users table for authentication
 CREATE TABLE IF NOT EXISTS users (
