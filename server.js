@@ -3,6 +3,8 @@ import 'dotenv/config';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'path';
+import fs from 'fs';
+import * as esbuild from 'esbuild';
 import pool, { waitForDb } from './lib/db.js';
 import crypto from 'crypto';
 import { incidentService } from './services/incidentService.js';
@@ -28,7 +30,34 @@ const authenticate = (req, res, next) => {
 };
 
 /**
- * ROUTES
+ * TRANSPILATION MIDDLEWARE (Required for .tsx support in this environment)
+ */
+app.use(async (req, res, next) => {
+  const cleanPath = req.path.split('?')[0];
+  if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) {
+    const filePath = path.join(rootPath, cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
+    if (!fs.existsSync(filePath)) return next();
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const result = await esbuild.transform(content, {
+        loader: cleanPath.endsWith('.tsx') ? 'tsx' : 'ts',
+        format: 'esm',
+        target: 'es2020',
+        sourcemap: 'inline',
+        define: { 'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '') }
+      });
+      res.type('application/javascript').send(result.code);
+    } catch (err) {
+      console.error(`Transpilation failed for ${cleanPath}:`, err);
+      res.status(500).send(`console.error("Transpilation failed for ${cleanPath}");`);
+    }
+  } else {
+    next();
+  }
+});
+
+/**
+ * API ROUTES
  */
 
 // Public Status
@@ -47,7 +76,14 @@ app.get('/api/status', async (req, res) => {
       if (r.key === 'incident_new_template') notifySettings.incidentNewTemplate = r.value;
       if (r.key === 'incident_resolved_template') notifySettings.incidentResolvedTemplate = r.value;
     });
-    res.json({ regions: regions.rows, services: services.rows, components: components.rows, incidents: incidents.rows, templates: templates.rows, notificationSettings: notifySettings });
+    res.json({ 
+      regions: regions.rows, 
+      services: services.rows, 
+      components: components.rows, 
+      incidents: incidents.rows, 
+      templates: templates.rows, 
+      notificationSettings: notifySettings 
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -58,15 +94,25 @@ app.post('/api/auth/login', async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     
-    // Simple verification (assuming scrypt hash from previous version)
     const [salt, hash] = rows[0].password_hash.split(':');
     const derived = crypto.scryptSync(password, salt, 64).toString('hex');
     if (derived !== hash) return res.status(401).json({ error: 'Invalid credentials' });
 
     const token = crypto.randomBytes(32).toString('hex');
     sessions.set(token, username);
-    res.cookie('session_id', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+    res.cookie('session_id', token, { httpOnly: true, secure: false }); // secure false for local dev/simulated env
     res.json({ token, username });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin Data
+app.get('/api/admin/data', authenticate, async (req, res) => {
+  try {
+    const [users, auditLogs] = await Promise.all([
+      pool.query('SELECT id, username, created_at AS "createdAt" FROM users ORDER BY username'),
+      pool.query('SELECT id, username, action_type AS "actionType", target_type AS "targetType", target_name AS "targetName", details, created_at AS "createdAt" FROM audit_logs ORDER BY created_at DESC LIMIT 100'),
+    ]);
+    res.json({ users: users.rows, auditLogs: auditLogs.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -85,16 +131,13 @@ app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Templates CRUD
-app.post('/api/admin/templates', authenticate, async (req, res) => {
-  const { componentName, name, title, description } = req.body;
+app.post('/api/admin/incidents/:id/resolve', authenticate, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'INSERT INTO templates (component_name, name, title, description) VALUES ($1, $2, $3, $4) RETURNING *',
-      [componentName, name, title, description]
-    );
-    await auditService.log(req.user, 'CREATE_TEMPLATE', 'TEMPLATE', name);
-    res.json(rows[0]);
+    const result = await incidentService.updateIncident(req.user, req.params.id, { 
+       ...req.body,
+       endTime: new Date().toISOString()
+    });
+    res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -111,7 +154,6 @@ const start = async () => {
     const port = process.env.PORT || 3000;
     const server = app.listen(port, () => console.log(`[SERVER] Ready at http://localhost:${port}`));
     
-    // Graceful Shutdown
     const shutdown = () => {
       console.log('[SERVER] Shutting down...');
       server.close(() => {
