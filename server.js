@@ -61,8 +61,8 @@ const pool = new Pool({
  */
 async function notifySubscribers(incidentId, type) {
   const apiKey = process.env.MAILCHIMP_API_KEY;
-  if (!apiKey) {
-    console.log('[NOTIFY] Mailchimp API Key missing. Skipping email notifications.');
+  if (!apiKey || apiKey === 'your_mandrill_api_key_here') {
+    console.log('[NOTIFY] Mailchimp API Key missing or default. Skipping email notifications.');
     return;
   }
 
@@ -128,7 +128,15 @@ async function notifySubscribers(incidentId, type) {
       })
     });
 
-    const result = await response.json();
+    const rawResponse = await response.text();
+    let result;
+    try {
+      result = JSON.parse(rawResponse);
+    } catch (e) {
+      console.error(`[NOTIFY] Mailchimp/Mandrill API error: Received non-JSON response. Status: ${response.status}. Body starts with: ${rawResponse.substring(0, 200)}`);
+      return;
+    }
+    
     console.log('[NOTIFY] Mailchimp API result:', result);
 
   } catch (err) {
@@ -214,9 +222,9 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
 
 // ADMIN: Paginated & Searchable Subscriptions
 app.get('/api/admin/subscribers', authenticate, async (req, res) => {
-  let { page = 1, limit = 20, search = '' } = req.query;
-  page = parseInt(page);
-  limit = parseInt(limit);
+  let page = parseInt(req.query.page) || 1;
+  let limit = parseInt(req.query.limit) || 20;
+  let search = req.query.search || '';
   const offset = (page - 1) * limit;
   
   // Convert * to % for SQL LIKE

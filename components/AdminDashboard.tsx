@@ -245,7 +245,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       }
       setActiveForm(null);
       resetFormsState();
-      loadSubscribers();
+      await loadSubscribers();
     } catch (err: any) {
       alert("Failed to save subscriber: " + err.message);
     } finally {
@@ -307,6 +307,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       alert("AI Suggestion failed: " + err.message);
     } finally { 
       setIsAiSuggesting(false); 
+    }
+  };
+
+  const handleDeleteSub = async (id: string) => {
+    if (!confirm('Remove subscriber?')) return;
+    try {
+      await removeSubscriber(id);
+      await loadSubscribers();
+    } catch (err: any) {
+      alert("Delete failed: " + err.message);
     }
   };
 
@@ -570,7 +580,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                         <td className="px-6 py-4 text-gray-400">{formatInTz(sub.createdAt)}</td>
                         <td className="px-6 py-4 text-right space-x-3">
                           <button onClick={() => { setEditingSubscriber(sub); setSubscriberEmail(sub.email); setActiveForm('subscriber'); }} className="text-indigo-600 font-bold uppercase hover:underline">Edit</button>
-                          <button onClick={() => { if(confirm('Remove subscriber?')) removeSubscriber(sub.id); loadSubscribers(); }} className="text-red-500 font-bold uppercase hover:underline">Delete</button>
+                          <button onClick={() => handleDeleteSub(sub.id)} className="text-red-500 font-bold uppercase hover:underline">Delete</button>
                         </td>
                       </tr>
                     ))}
