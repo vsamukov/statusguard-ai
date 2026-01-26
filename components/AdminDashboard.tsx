@@ -46,6 +46,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     endTime: ''
   });
 
+  // Save as template feature state
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+
   const [notifySettings, setNotifySettings] = useState<NotificationSettings>({
     incidentNewTemplate: '',
     incidentResolvedTemplate: ''
@@ -163,6 +167,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     setEditingIncident(null);
     setEditingTemplate(null);
     setEditingSubscriber(null);
+    setSaveAsTemplate(false);
+    setNewTemplateName('');
     setIncidentForm({ 
       id: '', 
       componentId: '', 
@@ -211,6 +217,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     if (!incidentForm.componentId) return alert("Select component");
     setIsProcessing(true);
     try {
+      // 1. Check if we need to save a template
+      if (saveAsTemplate && !editingIncident) {
+        if (!newTemplateName) {
+           throw new Error("Template name is required");
+        }
+        const selectedComp = state.components.find(c => c.id === incidentForm.componentId);
+        if (selectedComp) {
+          await addTemplate({
+            componentName: selectedComp.name,
+            name: newTemplateName,
+            title: incidentForm.title,
+            description: incidentForm.internalDesc
+          });
+        }
+      }
+
+      // 2. Save the incident
       const payload = {
         componentId: incidentForm.componentId,
         title: incidentForm.title,
@@ -227,7 +250,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       }
       resetFormsState();
     } catch (error: any) {
-      alert("Failed to save incident: " + error.message);
+      alert("Action failed: " + error.message);
     } finally {
       setIsProcessing(false);
     }
@@ -437,6 +460,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                 <input required placeholder="Incident Title" className="w-full border p-3 rounded-xl text-sm font-medium outline-none focus:border-indigo-500" value={incidentForm.title} onChange={e => setIncidentForm({...incidentForm, title: e.target.value})} />
                 <textarea required placeholder="Public description..." rows={4} className="w-full border p-3 rounded-xl text-sm outline-none focus:border-indigo-500" value={incidentForm.internalDesc} onChange={e => setIncidentForm({...incidentForm, internalDesc: e.target.value})} />
                 
+                {/* NEW: Save as Template Checkbox */}
+                {!editingIncident && (
+                  <div className="pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input 
+                        type="checkbox" 
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" 
+                        checked={saveAsTemplate}
+                        onChange={e => setSaveAsTemplate(e.target.checked)}
+                      />
+                      <span className="text-xs font-bold text-gray-600 group-hover:text-indigo-600 transition-colors uppercase tracking-tighter">Save these details as a new template</span>
+                    </label>
+                    {saveAsTemplate && (
+                      <div className="mt-3 animate-in slide-in-from-top-2 duration-300">
+                        <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1">New Template Name</label>
+                        <input 
+                          type="text" 
+                          required={saveAsTemplate}
+                          placeholder="e.g., Regional Network Congestion" 
+                          className="w-full border p-2 rounded-lg text-xs outline-none focus:border-indigo-500" 
+                          value={newTemplateName}
+                          onChange={e => setNewTemplateName(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <button disabled={isProcessing} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg disabled:bg-gray-400 transition-all flex items-center justify-center gap-2">
                   {isProcessing && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
                   {editingIncident ? 'Update Incident' : 'Broadcast Update'}
@@ -497,10 +548,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         </div>
       )}
 
+      {/* Subscriptions Tab */}
       {activeTab === 'subscriptions' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
           <div className="lg:col-span-2 space-y-6">
-            {/* 1. NOTIFICATION TEMPLATES (Above) */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
               <h3 className="font-bold text-gray-800 mb-6 border-b pb-2 uppercase text-xs tracking-widest">Notification Templates</h3>
               <form onSubmit={handleSaveNotifySettings} className="space-y-6">
@@ -531,7 +582,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
               </form>
             </div>
 
-            {/* 2. SUBSCRIBERS LIST (Below, Paginated + Searchable) */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div className="px-6 py-4 bg-gray-50 border-b flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="flex flex-col">
@@ -593,7 +643,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                 </table>
               </div>
 
-              {/* Pagination Controls */}
               {totalPages > 1 && (
                 <div className="px-6 py-4 bg-gray-50 border-t flex justify-between items-center">
                   <span className="text-[10px] text-gray-400 font-bold">Page {subsPage} of {totalPages}</span>
@@ -648,7 +697,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                 </p>
                 <div className="mt-4 pt-4 border-t border-indigo-100/50">
                   <p className="text-[11px] text-indigo-600 italic">
-                    Note: Email broadcasting uses Mailchimp. Ensure your API settings in <code className="bg-indigo-100 px-1">.env</code> are correct.
+                    Note: Email broadcasting uses SMTP. Ensure your credentials in <code className="bg-indigo-100 px-1">.env</code> are correct.
                   </p>
                 </div>
               </div>
@@ -657,7 +706,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         </div>
       )}
 
-      {/* Existing Tabs (templates, audit, configuration, team) */}
+      {/* Templates Tab */}
       {activeTab === 'templates' && (
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
            <div className="lg:col-span-2 space-y-6">
@@ -740,6 +789,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
          </div>
       )}
 
+      {/* Audit Logs Tab */}
       {activeTab === 'audit' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm animate-in fade-in duration-500">
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
@@ -779,6 +829,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         </div>
       )}
       
+      {/* Configuration Tab */}
       {activeTab === 'configuration' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
           <div className="lg:col-span-2 space-y-6">
@@ -880,6 +931,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         </div>
       )}
 
+      {/* Team Tab */}
       {activeTab === 'team' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
           <div className="lg:col-span-2 space-y-6">

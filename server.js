@@ -38,6 +38,20 @@ const verifyPassword = (password, storedValue) => {
 };
 
 /**
+ * AUDIT LOGGING HELPER
+ */
+async function logAudit(username, actionType, targetType, targetName, details = {}) {
+  try {
+    await pool.query(
+      'INSERT INTO audit_logs (username, action_type, target_type, target_name, details) VALUES ($1, $2, $3, $4, $5)',
+      [username, actionType, targetType, targetName, JSON.stringify(details)]
+    );
+  } catch (err) {
+    console.error('[AUDIT ERROR]', err);
+  }
+}
+
+/**
  * AUTHENTICATION MIDDLEWARE
  */
 const sessions = new Map();
@@ -197,64 +211,45 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ADMIN: Paginated & Searchable Subscriptions (Handles thousands of records)
 app.get('/api/admin/subscribers', authenticate, async (req, res) => {
   let page = parseInt(req.query.page) || 1;
   let limit = parseInt(req.query.limit) || 20;
   let search = req.query.search || '';
   const offset = (page - 1) * limit;
-  
   const sqlSearch = search.replace(/\*/g, '%');
   
   try {
     let queryStr = 'SELECT id, email, created_at AS "createdAt" FROM subscriptions';
     let countStr = 'SELECT COUNT(*) FROM subscriptions';
     const params = [];
-
     if (search) {
       const condition = ' WHERE email ILIKE $1';
       queryStr += condition;
       countStr += condition;
       params.push(sqlSearch.includes('%') ? sqlSearch : `%${sqlSearch}%`);
     }
-
     queryStr += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
-    
     const [dataRes, countRes] = await Promise.all([
       pool.query(queryStr, [...params, limit, offset]),
       pool.query(countStr, params)
     ]);
-
-    res.json({
-      data: dataRes.rows,
-      total: parseInt(countRes.rows[0].count),
-      page,
-      limit
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json({ data: dataRes.rows, total: parseInt(countRes.rows[0].count), page, limit });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/admin/subscriptions', authenticate, async (req, res) => {
   const { email } = req.body;
   try {
     const { rows } = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) RETURNING id, email, created_at AS "createdAt"', [email]);
+    await logAudit(req.user, 'CREATE_SUBSCRIPTION', 'SUBSCRIPTION', email);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: 'Email already exists' }); }
 });
 
-app.put('/api/admin/subscriptions/:id', authenticate, async (req, res) => {
-  const { email } = req.body;
-  try {
-    const { rows } = await pool.query('UPDATE subscriptions SET email = $1 WHERE id = $2 RETURNING id, email, created_at AS "createdAt"', [email, req.params.id]);
-    res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 app.delete('/api/admin/subscriptions/:id', authenticate, async (req, res) => {
   try {
-    await pool.query('DELETE FROM subscriptions WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('DELETE FROM subscriptions WHERE id = $1 RETURNING email', [req.params.id]);
+    if (rows[0]) await logAudit(req.user, 'DELETE_SUBSCRIPTION', 'SUBSCRIPTION', rows[0].email);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -264,6 +259,7 @@ app.post('/api/admin/notification-settings', authenticate, async (req, res) => {
   try {
     await pool.query('INSERT INTO notification_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['incident_new_template', incidentNewTemplate]);
     await pool.query('INSERT INTO notification_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['incident_resolved_template', incidentResolvedTemplate]);
+    await logAudit(req.user, 'UPDATE_SETTINGS', 'SYSTEM', 'Notification Templates');
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -275,6 +271,7 @@ app.post('/api/admin/templates', authenticate, async (req, res) => {
       'INSERT INTO templates (component_name, name, title, description) VALUES ($1, $2, $3, $4) RETURNING id, component_name AS "componentName", name, title, description', 
       [componentName, name, title, description]
     );
+    await logAudit(req.user, 'CREATE_TEMPLATE', 'TEMPLATE', name, { componentName, title });
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -286,64 +283,15 @@ app.put('/api/admin/templates/:id', authenticate, async (req, res) => {
       'UPDATE templates SET name=$1, title=$2, description=$3, component_name=$4 WHERE id=$5 RETURNING id, component_name AS "componentName", name, title, description',
       [name, title, description, componentName, req.params.id]
     );
+    await logAudit(req.user, 'UPDATE_TEMPLATE', 'TEMPLATE', name);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/admin/templates/:id', authenticate, async (req, res) => {
   try {
-    await pool.query('DELETE FROM templates WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/admin/regions', authenticate, async (req, res) => {
-  const { name } = req.body;
-  try {
-    const { rows } = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING id, name', [name]);
-    res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/admin/regions/:id', authenticate, async (req, res) => {
-  try {
-    await pool.query('DELETE FROM regions WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/admin/services', authenticate, async (req, res) => {
-  const { regionId, name, description } = req.body;
-  try {
-    const { rows } = await pool.query(
-      'INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', 
-      [regionId, name, description]
-    );
-    res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/admin/services/:id', authenticate, async (req, res) => {
-  try {
-    await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/admin/components', authenticate, async (req, res) => {
-  const { serviceId, name, description } = req.body;
-  try {
-    const { rows } = await pool.query(
-      'INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', 
-      [serviceId, name, description]
-    );
-    res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/admin/components/:id', authenticate, async (req, res) => {
-  try {
-    await pool.query('DELETE FROM components WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('DELETE FROM templates WHERE id = $1 RETURNING name', [req.params.id]);
+    if (rows[0]) await logAudit(req.user, 'DELETE_TEMPLATE', 'TEMPLATE', rows[0].name);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -355,6 +303,7 @@ app.post('/api/admin/incidents', authenticate, async (req, res) => {
       'INSERT INTO incidents (component_id, title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id', 
       [componentId, title, description, severity, startTime, endTime]
     );
+    await logAudit(req.user, 'CREATE_INCIDENT', 'INCIDENT', title, { severity });
     notifySubscribers(rows[0].id, 'NEW');
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -367,6 +316,7 @@ app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
       'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING id',
       [title, description, severity, startTime, endTime, componentId, req.params.id]
     );
+    await logAudit(req.user, 'UPDATE_INCIDENT', 'INCIDENT', title);
     if (endTime) notifySubscribers(rows[0].id, 'RESOLVED');
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -374,8 +324,66 @@ app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
 
 app.post('/api/admin/incidents/:id/resolve', authenticate, async (req, res) => {
   try {
-    await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING title', [req.params.id]);
+    await logAudit(req.user, 'RESOLVE_INCIDENT', 'INCIDENT', rows[0].title);
     notifySubscribers(req.params.id, 'RESOLVED');
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/regions', authenticate, async (req, res) => {
+  const { name } = req.body;
+  try {
+    const { rows } = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING id, name', [name]);
+    await logAudit(req.user, 'CREATE_REGION', 'REGION', name);
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/regions/:id', authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM regions WHERE id = $1 RETURNING name', [req.params.id]);
+    if (rows[0]) await logAudit(req.user, 'DELETE_REGION', 'REGION', rows[0].name);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/services', authenticate, async (req, res) => {
+  const { regionId, name, description } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id AS "regionId", name, description', 
+      [regionId, name, description]
+    );
+    await logAudit(req.user, 'CREATE_SERVICE', 'SERVICE', name);
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/services/:id', authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM services WHERE id = $1 RETURNING name', [req.params.id]);
+    if (rows[0]) await logAudit(req.user, 'DELETE_SERVICE', 'SERVICE', rows[0].name);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/components', authenticate, async (req, res) => {
+  const { serviceId, name, description } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id AS "serviceId", name, description, created_at AS "createdAt"', 
+      [serviceId, name, description]
+    );
+    await logAudit(req.user, 'CREATE_COMPONENT', 'COMPONENT', name);
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/components/:id', authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query('DELETE FROM components WHERE id = $1 RETURNING name', [req.params.id]);
+    if (rows[0]) await logAudit(req.user, 'DELETE_COMPONENT', 'COMPONENT', rows[0].name);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -385,13 +393,15 @@ app.post('/api/admin/users', authenticate, async (req, res) => {
   try {
     const hash = hashPassword(password);
     const { rows } = await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username', [username, hash]);
+    await logAudit(req.user, 'CREATE_USER', 'USER', username);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: 'Username already exists' }); }
 });
 
 app.delete('/api/admin/users/:id', authenticate, async (req, res) => {
   try {
-    await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('DELETE FROM users WHERE id = $1 RETURNING username', [req.params.id]);
+    if (rows[0]) await logAudit(req.user, 'DELETE_USER', 'USER', rows[0].username);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
