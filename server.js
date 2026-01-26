@@ -312,22 +312,45 @@ app.post('/api/admin/incidents', authenticate, async (req, res) => {
 app.put('/api/admin/incidents/:id', authenticate, async (req, res) => {
   const { title, description, severity, startTime, endTime, componentId } = req.body;
   try {
+    // 1. Fetch current incident state to detect resolution transition
+    const currentRes = await pool.query('SELECT end_time FROM incidents WHERE id = $1', [req.params.id]);
+    if (currentRes.rows.length === 0) return res.status(404).json({ error: 'Incident not found' });
+    const wasResolved = currentRes.rows[0].end_time !== null;
+
+    // 2. Perform the update
     const { rows } = await pool.query(
       'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING id',
       [title, description, severity, startTime, endTime, componentId, req.params.id]
     );
+    
     await logAudit(req.user, 'UPDATE_INCIDENT', 'INCIDENT', title);
-    if (endTime) notifySubscribers(rows[0].id, 'RESOLVED');
+
+    // 3. Only notify RESOLVED if this update is what actually resolves the incident for the first time
+    const isNowResolved = endTime !== null;
+    if (isNowResolved && !wasResolved) {
+      notifySubscribers(rows[0].id, 'RESOLVED');
+    }
+    
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/admin/incidents/:id/resolve', authenticate, async (req, res) => {
   try {
-    const { rows } = await pool.query('UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 RETURNING title', [req.params.id]);
-    await logAudit(req.user, 'RESOLVE_INCIDENT', 'INCIDENT', rows[0].title);
-    notifySubscribers(req.params.id, 'RESOLVED');
-    res.json({ success: true });
+    // Only update and notify if the incident is currently active
+    const { rows } = await pool.query(
+      'UPDATE incidents SET end_time = CURRENT_TIMESTAMP WHERE id = $1 AND end_time IS NULL RETURNING title, id', 
+      [req.params.id]
+    );
+    
+    if (rows.length > 0) {
+      await logAudit(req.user, 'RESOLVE_INCIDENT', 'INCIDENT', rows[0].title);
+      notifySubscribers(rows[0].id, 'RESOLVED');
+      res.json({ success: true });
+    } else {
+      // Incident already resolved or not found, do nothing
+      res.json({ success: true, message: 'Already resolved or not found' });
+    }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
