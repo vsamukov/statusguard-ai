@@ -7,11 +7,15 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import * as esbuild from 'esbuild';
+import SubscriptionService from './services/subscriptionService.js';
 
 const app = express();
 const rootPath = path.resolve();
 
 app.use(express.json());
+
+// Initialize Subscription Service
+const notificationService = new SubscriptionService(process.env.MAILCHIMP_API_KEY);
 
 /**
  * SECURITY HELPERS
@@ -57,19 +61,13 @@ const pool = new Pool({
 });
 
 /**
- * NOTIFICATION HELPERS (Mailchimp Transactional / Mandrill)
+ * NOTIFICATION ORCHESTRATION
  */
 async function notifySubscribers(incidentId, type) {
-  const apiKey = process.env.MAILCHIMP_API_KEY;
-  if (!apiKey || apiKey === 'your_mandrill_api_key_here') {
-    console.log('[NOTIFY] Mailchimp API Key missing or default. Skipping email notifications.');
-    return;
-  }
-
   try {
     const subscribersRes = await pool.query('SELECT email FROM subscriptions');
-    const subscribers = subscribersRes.rows;
-    if (subscribers.length === 0) return;
+    const recipients = subscribersRes.rows.map(r => r.email);
+    if (recipients.length === 0) return;
 
     const incidentRes = await pool.query(`
       SELECT i.*, c.name as comp_name, s.name as svc_name, r.name as reg_name
@@ -101,46 +99,26 @@ async function notifySubscribers(incidentId, type) {
     });
 
     const subject = type === 'NEW' ? `[Issue] ${incident.title}` : `[Resolved] ${incident.title}`;
-    
-    console.log(`[NOTIFY] Dispatching to ${subscribers.length} subscribers via Mailchimp Transactional...`);
+    const fromEmail = process.env.MAILCHIMP_FROM_EMAIL || 'status@voximplant.com';
 
-    const response = await fetch('https://mandrillapp.com/api/1.0/messages/send.json', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        key: apiKey,
-        message: {
-          from_email: process.env.MAILCHIMP_FROM_EMAIL || 'status@voximplant.com',
-          from_name: 'Voximplant Status',
-          subject: subject,
-          html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 12px; padding: 30px;">
-            <div style="text-align: center; margin-bottom: 20px;">
-              <h2 style="color: #4f46e5; margin-bottom: 5px;">Status Update</h2>
-              <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-            </div>
-            <p style="white-space: pre-wrap;">${messageHtml}</p>
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #999; text-align: center;">
-              This is an automated message. To unsubscribe, visit the status page.
-            </div>
-          </div>`,
-          to: subscribers.map(s => ({ email: s.email, type: 'to' }))
-        }
-      })
+    await notificationService.sendBroadcast({
+      fromEmail,
+      subject,
+      recipients,
+      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 12px; padding: 30px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #4f46e5; margin-bottom: 5px;">Status Update</h2>
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        </div>
+        <p style="white-space: pre-wrap;">${messageHtml}</p>
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #999; text-align: center;">
+          This is an automated message. To unsubscribe, visit our status page.
+        </div>
+      </div>`
     });
 
-    const rawResponse = await response.text();
-    let result;
-    try {
-      result = JSON.parse(rawResponse);
-    } catch (e) {
-      console.error(`[NOTIFY] Mailchimp/Mandrill API error: Received non-JSON response. Status: ${response.status}. Body starts with: ${rawResponse.substring(0, 200)}`);
-      return;
-    }
-    
-    console.log('[NOTIFY] Mailchimp API result:', result);
-
   } catch (err) {
-    console.error('[NOTIFY ERROR]', err);
+    console.error('[NOTIFY ORCHESTRATOR ERROR]', err);
   }
 }
 
@@ -174,7 +152,6 @@ app.get('/api/status', async (req, res) => {
       notificationSettings: notifySettings
     });
   } catch (err) {
-    console.error('API Error /api/status:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -220,14 +197,13 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ADMIN: Paginated & Searchable Subscriptions
+// ADMIN: Paginated & Searchable Subscriptions (Handles thousands of records)
 app.get('/api/admin/subscribers', authenticate, async (req, res) => {
   let page = parseInt(req.query.page) || 1;
   let limit = parseInt(req.query.limit) || 20;
   let search = req.query.search || '';
   const offset = (page - 1) * limit;
   
-  // Convert * to % for SQL LIKE
   const sqlSearch = search.replace(/\*/g, '%');
   
   try {
