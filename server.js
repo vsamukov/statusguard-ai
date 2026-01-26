@@ -114,7 +114,7 @@ async function notifySubscribers(incidentId, type) {
           from_name: 'Voximplant Status',
           subject: subject,
           html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 12px; padding: 30px;">
-            <div style="text-align: center, margin-bottom: 20px;">
+            <div style="text-align: center; margin-bottom: 20px;">
               <h2 style="color: #4f46e5; margin-bottom: 5px;">Status Update</h2>
               <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
             </div>
@@ -142,13 +142,12 @@ async function notifySubscribers(incidentId, type) {
 
 app.get('/api/status', async (req, res) => {
   try {
-    const [regions, services, components, incidents, templates, subs, settings] = await Promise.all([
+    const [regions, services, components, incidents, templates, settings] = await Promise.all([
       pool.query('SELECT id, name FROM regions ORDER BY name'),
       pool.query('SELECT id, region_id AS "regionId", name, description FROM services ORDER BY name'),
       pool.query('SELECT id, service_id AS "serviceId", name, description, created_at AS "createdAt" FROM components ORDER BY name'),
       pool.query('SELECT id, component_id AS "componentId", title, description, severity, start_time AS "startTime", end_time AS "endTime" FROM incidents ORDER BY start_time DESC'),
       pool.query('SELECT id, component_name AS "componentName", name, title, description FROM templates ORDER BY name'),
-      pool.query('SELECT id, email, created_at AS "createdAt" FROM subscriptions ORDER BY created_at DESC'),
       pool.query('SELECT key, value FROM notification_settings'),
     ]);
 
@@ -164,7 +163,6 @@ app.get('/api/status', async (req, res) => {
       components: components.rows,
       incidents: incidents.rows,
       templates: templates.rows,
-      subscriptions: subs.rows,
       notificationSettings: notifySettings
     });
   } catch (err) {
@@ -212,6 +210,46 @@ app.get('/api/admin/data', authenticate, async (req, res) => {
     ]);
     res.json({ users: users.rows, auditLogs: auditLogs.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ADMIN: Paginated & Searchable Subscriptions
+app.get('/api/admin/subscribers', authenticate, async (req, res) => {
+  let { page = 1, limit = 20, search = '' } = req.query;
+  page = parseInt(page);
+  limit = parseInt(limit);
+  const offset = (page - 1) * limit;
+  
+  // Convert * to % for SQL LIKE
+  const sqlSearch = search.replace(/\*/g, '%');
+  
+  try {
+    let queryStr = 'SELECT id, email, created_at AS "createdAt" FROM subscriptions';
+    let countStr = 'SELECT COUNT(*) FROM subscriptions';
+    const params = [];
+
+    if (search) {
+      const condition = ' WHERE email ILIKE $1';
+      queryStr += condition;
+      countStr += condition;
+      params.push(sqlSearch.includes('%') ? sqlSearch : `%${sqlSearch}%`);
+    }
+
+    queryStr += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+    
+    const [dataRes, countRes] = await Promise.all([
+      pool.query(queryStr, [...params, limit, offset]),
+      pool.query(countStr, params)
+    ]);
+
+    res.json({
+      data: dataRes.rows,
+      total: parseInt(countRes.rows[0].count),
+      page,
+      limit
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/admin/subscriptions', authenticate, async (req, res) => {

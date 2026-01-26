@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../store.tsx';
 import { Severity, Incident, Template, Subscription, NotificationSettings } from '../types.ts';
 import { geminiService } from '../services/geminiService.ts';
+import { api } from '../services/api.ts';
 
 interface AdminDashboardProps {
   onViewPublic?: () => void;
@@ -25,6 +26,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [editingSubscriber, setEditingSubscriber] = useState<Subscription | null>(null);
   
+  // Subscribers Paginated State
+  const [subscribers, setSubscribers] = useState<Subscription[]>([]);
+  const [subsTotal, setSubsTotal] = useState(0);
+  const [subsPage, setSubsPage] = useState(1);
+  const [subsLimit] = useState(20);
+  const [subsSearch, setSubsSearch] = useState('');
+  const [isSubsLoading, setIsSubsLoading] = useState(false);
+
   const [selRegionId, setSelRegionId] = useState('');
   const [selServiceId, setSelServiceId] = useState('');
   const [incidentForm, setIncidentForm] = useState({ 
@@ -119,11 +128,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     return new Date(utcTime).toISOString();
   };
 
+  const loadSubscribers = useCallback(async () => {
+    setIsSubsLoading(true);
+    try {
+      const res = await api.getSubscribers(subsPage, subsLimit, subsSearch);
+      setSubscribers(res.data);
+      setSubsTotal(res.total);
+    } catch (err) {
+      console.error("Failed to load subscribers", err);
+    } finally {
+      setIsSubsLoading(false);
+    }
+  }, [subsPage, subsLimit, subsSearch]);
+
   useEffect(() => {
-    if (activeTab === 'team' || activeTab === 'audit' || activeTab === 'subscriptions') fetchAdminData();
+    if (activeTab === 'team' || activeTab === 'audit') fetchAdminData();
+    if (activeTab === 'subscriptions') {
+      fetchAdminData();
+      loadSubscribers();
+    }
     setActiveForm(null);
     resetFormsState();
-  }, [activeTab]);
+  }, [activeTab, subsPage, subsSearch, loadSubscribers]);
 
   const resetFormsState = () => {
     setRegionForm({ name: '' });
@@ -219,6 +245,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       }
       setActiveForm(null);
       resetFormsState();
+      loadSubscribers();
     } catch (err: any) {
       alert("Failed to save subscriber: " + err.message);
     } finally {
@@ -293,6 +320,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     if (t.includes('TEMPLATE')) return 'text-purple-600 bg-purple-50';
     return 'text-gray-600 bg-gray-50';
   };
+
+  const totalPages = Math.ceil(subsTotal / subsLimit);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -461,46 +490,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       {activeTab === 'subscriptions' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-              <div className="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
-                <h3 className="font-bold text-sm text-gray-700 uppercase tracking-tighter">Subscribers ({state.subscriptions.length})</h3>
-                <button 
-                  onClick={() => { setActiveForm('subscriber'); setEditingSubscriber(null); setSubscriberEmail(''); }}
-                  className="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-                >
-                  Add Manually
-                </button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50/50 text-gray-400 uppercase font-black text-[9px] tracking-widest border-b">
-                    <tr>
-                      <th className="px-6 py-3">Email Address</th>
-                      <th className="px-6 py-3">Subscribed On</th>
-                      <th className="px-6 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {state.subscriptions.map(sub => (
-                      <tr key={sub.id} className="hover:bg-gray-50/50 group">
-                        <td className="px-6 py-4 font-bold text-gray-800">{sub.email}</td>
-                        <td className="px-6 py-4 text-gray-400">{formatInTz(sub.createdAt)}</td>
-                        <td className="px-6 py-4 text-right space-x-3">
-                          <button onClick={() => { setEditingSubscriber(sub); setSubscriberEmail(sub.email); setActiveForm('subscriber'); }} className="text-indigo-600 font-bold uppercase hover:underline">Edit</button>
-                          <button onClick={() => { if(confirm('Remove subscriber?')) removeSubscriber(sub.id); }} className="text-red-500 font-bold uppercase hover:underline">Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                    {state.subscriptions.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-12 text-center text-gray-400 italic">No active subscriptions.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
+            {/* 1. NOTIFICATION TEMPLATES (Above) */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
               <h3 className="font-bold text-gray-800 mb-6 border-b pb-2 uppercase text-xs tracking-widest">Notification Templates</h3>
               <form onSubmit={handleSaveNotifySettings} className="space-y-6">
@@ -530,6 +520,92 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                 </button>
               </form>
             </div>
+
+            {/* 2. SUBSCRIBERS LIST (Below, Paginated + Searchable) */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-6 py-4 bg-gray-50 border-b flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex flex-col">
+                  <h3 className="font-bold text-sm text-gray-700 uppercase tracking-tighter">Subscribers ({subsTotal})</h3>
+                  <p className="text-[10px] text-gray-400">Manage your notification audience</p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="relative w-full">
+                    <input 
+                      type="text" 
+                      placeholder="Search email (* for wildcard)..." 
+                      className="pl-8 pr-3 py-1.5 border rounded-lg text-xs w-full outline-none focus:border-indigo-500"
+                      value={subsSearch}
+                      onChange={(e) => { setSubsSearch(e.target.value); setSubsPage(1); }}
+                    />
+                    <svg className="w-3.5 h-3.5 absolute left-2.5 top-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveForm('subscriber'); setEditingSubscriber(null); setSubscriberEmail(''); }}
+                    className="bg-indigo-600 text-white text-[10px] font-bold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm whitespace-nowrap"
+                  >
+                    Add Manually
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto min-h-[300px] relative">
+                {isSubsLoading && (
+                  <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                    <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                  </div>
+                )}
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50/50 text-gray-400 uppercase font-black text-[9px] tracking-widest border-b">
+                    <tr>
+                      <th className="px-6 py-3">Email Address</th>
+                      <th className="px-6 py-3">Subscribed On</th>
+                      <th className="px-6 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {subscribers.map(sub => (
+                      <tr key={sub.id} className="hover:bg-gray-50/50 group">
+                        <td className="px-6 py-4 font-bold text-gray-800">{sub.email}</td>
+                        <td className="px-6 py-4 text-gray-400">{formatInTz(sub.createdAt)}</td>
+                        <td className="px-6 py-4 text-right space-x-3">
+                          <button onClick={() => { setEditingSubscriber(sub); setSubscriberEmail(sub.email); setActiveForm('subscriber'); }} className="text-indigo-600 font-bold uppercase hover:underline">Edit</button>
+                          <button onClick={() => { if(confirm('Remove subscriber?')) removeSubscriber(sub.id); loadSubscribers(); }} className="text-red-500 font-bold uppercase hover:underline">Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!isSubsLoading && subscribers.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-12 text-center text-gray-400 italic">No subscribers found matching your criteria.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="px-6 py-4 bg-gray-50 border-t flex justify-between items-center">
+                  <span className="text-[10px] text-gray-400 font-bold">Page {subsPage} of {totalPages}</span>
+                  <div className="flex gap-1">
+                    <button 
+                      disabled={subsPage === 1}
+                      onClick={() => setSubsPage(p => Math.max(1, p - 1))}
+                      className="px-3 py-1 border rounded bg-white text-[10px] font-bold disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <button 
+                      disabled={subsPage === totalPages}
+                      onClick={() => setSubsPage(p => Math.min(totalPages, p + 1))}
+                      className="px-3 py-1 border rounded bg-white text-[10px] font-bold disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <aside className="sticky top-8 space-y-4">
@@ -558,16 +634,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
               <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
                 <h4 className="font-bold text-indigo-700 text-xs mb-2">About Subscriptions</h4>
                 <p className="text-[11px] text-indigo-600 leading-relaxed">
-                  Notifications are sent automatically via Mailchimp to all subscribers when an incident is broadcast or resolved. 
-                  Ensure your <code className="bg-indigo-100 px-1">MAILCHIMP_API_KEY</code> is correctly configured in the environment.
+                  Search supports partial matches. Use <code className="bg-indigo-100 px-1">*</code> as a wildcard (e.g., <code className="bg-indigo-100 px-1">joe*</code> or <code className="bg-indigo-100 px-1">*@gmail.com</code>).
                 </p>
+                <div className="mt-4 pt-4 border-t border-indigo-100/50">
+                  <p className="text-[11px] text-indigo-600 italic">
+                    Note: Email broadcasting uses Mailchimp. Ensure your API settings in <code className="bg-indigo-100 px-1">.env</code> are correct.
+                  </p>
+                </div>
               </div>
             )}
           </aside>
         </div>
       )}
 
-      {/* Existing Tabs (templates, audit, configuration, team) remain exactly as provided */}
+      {/* Existing Tabs (templates, audit, configuration, team) */}
       {activeTab === 'templates' && (
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
            <div className="lg:col-span-2 space-y-6">

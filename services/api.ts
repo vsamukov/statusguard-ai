@@ -42,6 +42,16 @@ export const api = {
     return handleResponse(res);
   },
 
+  async getSubscribers(page = 1, limit = 20, search = '') {
+    const query = new URLSearchParams({ 
+      page: page.toString(), 
+      limit: limit.toString(), 
+      search 
+    }).toString();
+    const res = await fetch(`${API_BASE}/admin/subscribers?${query}`, { headers: getHeaders() });
+    return handleResponse(res);
+  },
+
   // Templates
   async createTemplate(template: any) {
     const res = await fetch(`${API_BASE}/admin/templates`, { 
@@ -109,8 +119,8 @@ export const api = {
 
   async deleteSubscriber(id: string) {
     const res = await fetch(`${API_BASE}/admin/subscriptions/${id}`, {
-      method: 'DELETE',
-      headers: getHeaders()
+      method: 'DELETE', 
+      headers: getHeaders() 
     });
     return handleResponse(res);
   },
