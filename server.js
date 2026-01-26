@@ -14,8 +14,8 @@ const rootPath = path.resolve();
 
 app.use(express.json());
 
-// Initialize Subscription Service
-const notificationService = new SubscriptionService(process.env.MAILCHIMP_API_KEY);
+// Initialize Subscription Service (now uses SMTP via env)
+const notificationService = new SubscriptionService();
 
 /**
  * SECURITY HELPERS
@@ -99,7 +99,7 @@ async function notifySubscribers(incidentId, type) {
     });
 
     const subject = type === 'NEW' ? `[Issue] ${incident.title}` : `[Resolved] ${incident.title}`;
-    const fromEmail = process.env.MAILCHIMP_FROM_EMAIL || 'status@voximplant.com';
+    const fromEmail = process.env.SMTP_FROM || 'status@voximplant.com';
 
     await notificationService.sendBroadcast({
       fromEmail,
