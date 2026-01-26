@@ -51,6 +51,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
     return Array.from(names).sort();
   }, [state.components]);
 
+  // Recently Resolved Incidents (Last 5)
+  const recentlyResolvedIncidents = useMemo(() => {
+    return state.incidents
+      .filter(i => !!i.endTime)
+      .sort((a, b) => new Date(b.endTime!).getTime() - new Date(a.endTime!).getTime())
+      .slice(0, 5);
+  }, [state.incidents]);
+
   const [regionForm, setRegionForm] = useState({ name: '' });
   const [serviceForm, setServiceForm] = useState({ regionId: '', name: '', description: '' });
   const [compForm, setCompForm] = useState({ serviceId: '', name: '', description: '' });
@@ -157,6 +165,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
       endTime: incident.endTime ? toInputFormat(incident.endTime) : ''
     });
     setActiveTab('reporting');
+    // Scroll to form on mobile
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSaveIncident = async (e: React.FormEvent) => {
@@ -336,12 +346,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                    </div>
                 </div>
 
-                {editingIncident && (
-                  <div className="animate-in slide-in-from-top-1">
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">End Time (UTC{state.timezoneOffset >= 0 ? '+' : ''}{state.timezoneOffset/60})</label>
-                    <input type="datetime-local" className="w-full border p-3 rounded-xl text-sm outline-none" value={incidentForm.endTime} onChange={e => setIncidentForm({...incidentForm, endTime: e.target.value})} />
-                  </div>
-                )}
+                <div className="animate-in slide-in-from-top-1">
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">End Time (UTC{state.timezoneOffset >= 0 ? '+' : ''}{state.timezoneOffset/60})</label>
+                  <input type="datetime-local" className="w-full border p-3 rounded-xl text-sm outline-none" value={incidentForm.endTime} onChange={e => setIncidentForm({...incidentForm, endTime: e.target.value})} />
+                  <p className="text-[10px] text-gray-400 mt-1 italic">Leave empty to keep the incident active.</p>
+                </div>
 
                 <input required placeholder="Incident Title" className="w-full border p-3 rounded-xl text-sm font-medium outline-none focus:border-indigo-500" value={incidentForm.title} onChange={e => setIncidentForm({...incidentForm, title: e.target.value})} />
                 <textarea required placeholder="Public description..." rows={4} className="w-full border p-3 rounded-xl text-sm outline-none focus:border-indigo-500" value={incidentForm.internalDesc} onChange={e => setIncidentForm({...incidentForm, internalDesc: e.target.value})} />
@@ -360,7 +369,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                  <span>Active Now</span>
                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                </h3>
-               <div className="space-y-3">
+               <div className="space-y-3 mb-8">
                  {state.incidents.filter(i => !i.endTime).map(inc => (
                    <div key={inc.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 group relative">
                      <p className="text-xs font-bold text-gray-800 line-clamp-1 mb-2">{inc.title}</p>
@@ -378,6 +387,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
                    </div>
                  ))}
                  {state.incidents.filter(i => !i.endTime).length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">No active incidents</p>}
+               </div>
+
+               <h3 className="font-bold text-sm mb-4 border-b pb-2 flex items-center justify-between">
+                 <span>Recently Resolved</span>
+                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+               </h3>
+               <div className="space-y-3">
+                 {recentlyResolvedIncidents.map(inc => (
+                   <div key={inc.id} className="p-4 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors group relative">
+                     <div className="flex flex-col gap-1 mb-2">
+                        <p className="text-xs font-bold text-gray-700 line-clamp-1">{inc.title}</p>
+                        <span className="text-[9px] text-gray-400 font-medium">Resolved: {formatInTz(inc.endTime)}</span>
+                     </div>
+                     <div className="flex justify-between items-center">
+                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${inc.severity === Severity.OUTAGE ? 'bg-gray-100 text-red-400' : 'bg-gray-100 text-yellow-500'}`}>
+                          {inc.severity}
+                        </span>
+                        <button onClick={() => handleEditIncident(inc)} className="text-[10px] font-bold text-indigo-600 hover:underline opacity-0 group-hover:opacity-100 transition-opacity">Edit Record</button>
+                     </div>
+                   </div>
+                 ))}
+                 {recentlyResolvedIncidents.length === 0 && <p className="text-xs text-gray-400 italic text-center py-4">No recent history</p>}
                </div>
              </div>
           </aside>

@@ -1,11 +1,14 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../store.tsx';
 import { Severity, Incident } from '../types.ts';
 import UptimeGraph from './UptimeGraph.tsx';
 
 const PublicDashboard: React.FC = () => {
-  const { state, calculateSLA } = useApp();
+  const { state, calculateSLA, subscribe, unsubscribe } = useApp();
+  const [email, setEmail] = useState('');
+  const [subStatus, setSubStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return 'N/A';
@@ -37,6 +40,27 @@ const PublicDashboard: React.FC = () => {
     });
   };
 
+  const handleSubscribe = async (e: React.FormEvent, isUnsubscribe = false) => {
+    e.preventDefault();
+    if (!email) return;
+    setSubStatus('loading');
+    setErrorMessage('');
+    try {
+      if (isUnsubscribe) {
+        await unsubscribe(email);
+        setSubStatus('success');
+        setErrorMessage('You have been successfully unsubscribed.');
+      } else {
+        await subscribe(email);
+        setSubStatus('success');
+      }
+      setEmail('');
+    } catch (err: any) {
+      setSubStatus('error');
+      setErrorMessage(err.message || 'Subscription failed.');
+    }
+  };
+
   const getComponentStatus = (componentId: string) => {
     const activeIncidents = state.incidents.filter(i => i.componentId === componentId && !i.endTime);
     if (activeIncidents.find(i => i.severity === Severity.OUTAGE)) return Severity.OUTAGE;
@@ -61,7 +85,6 @@ const PublicDashboard: React.FC = () => {
     return { label: 'All Systems Operational', color: 'bg-emerald-500', sub: 'Services are running optimally' };
   }, [state, state.incidents, state.components]);
 
-  // Logic for Past Incidents (90 days)
   const pastIncidentsByDate = React.useMemo(() => {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -82,9 +105,45 @@ const PublicDashboard: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
-      <div className={`${globalStatus.color} rounded-xl p-8 text-white shadow-lg mb-12 transition-all duration-500`}>
-        <h1 className="text-3xl font-bold mb-2">{globalStatus.label}</h1>
-        <p className="opacity-90">{globalStatus.sub}</p>
+      <div className={`${globalStatus.color} rounded-xl p-8 text-white shadow-lg mb-8 transition-all duration-500`}>
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">{globalStatus.label}</h1>
+            <p className="opacity-90">{globalStatus.sub}</p>
+          </div>
+          <div className="bg-white/10 p-4 rounded-xl backdrop-blur-md border border-white/20 w-full md:w-auto">
+            <h3 className="text-sm font-bold mb-2 uppercase tracking-tighter">Get Status Updates</h3>
+            <form onSubmit={(e) => handleSubscribe(e)} className="flex flex-col gap-2">
+              <div className="flex bg-white rounded-lg overflow-hidden border border-white/30">
+                <input 
+                  type="email" 
+                  required
+                  placeholder="email@example.com" 
+                  className="px-3 py-2 text-gray-900 text-xs outline-none w-full"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+                <button 
+                  disabled={subStatus === 'loading'}
+                  className="bg-indigo-600 px-4 py-2 text-xs font-bold hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
+                >
+                  {subStatus === 'loading' ? '...' : 'Subscribe'}
+                </button>
+              </div>
+              <div className="flex justify-between items-center px-1">
+                <button 
+                  type="button"
+                  onClick={(e) => handleSubscribe(e as any, true)}
+                  className="text-[9px] font-bold uppercase hover:underline opacity-80"
+                >
+                  Unsubscribe
+                </button>
+                {subStatus === 'success' && <span className="text-[10px] font-bold text-emerald-300">Done!</span>}
+                {subStatus === 'error' && <span className="text-[10px] font-bold text-red-300 truncate max-w-[150px]">{errorMessage}</span>}
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
 
       {state.incidents.filter(i => !i.endTime).length > 0 && (

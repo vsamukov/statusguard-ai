@@ -44,6 +44,17 @@ export interface Incident {
   endTime: string | null;
 }
 
+export interface Subscription {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface NotificationSettings {
+  incidentNewTemplate: string;
+  incidentResolvedTemplate: string;
+}
+
 export interface AdminUser {
   id: string;
   username: string;
@@ -66,6 +77,8 @@ export interface AppState {
   components: Component[];
   templates: Template[];
   incidents: Incident[];
+  subscriptions: Subscription[];
+  notificationSettings: NotificationSettings;
   users: AdminUser[];
   auditLogs: AuditLog[];
   isAuthenticated: boolean;

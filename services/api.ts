@@ -69,7 +69,62 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Regions & Services...
+  // Subscriptions (Public)
+  async subscribe(email: string) {
+    const res = await fetch(`${API_BASE}/subscriptions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(res);
+  },
+
+  async unsubscribe(email: string) {
+    const res = await fetch(`${API_BASE}/subscriptions/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(res);
+  },
+
+  // Subscriptions (Admin)
+  async createSubscriber(email: string) {
+    const res = await fetch(`${API_BASE}/admin/subscriptions`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(res);
+  },
+
+  async updateSubscriber(id: string, email: string) {
+    const res = await fetch(`${API_BASE}/admin/subscriptions/${id}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(res);
+  },
+
+  async deleteSubscriber(id: string) {
+    const res = await fetch(`${API_BASE}/admin/subscriptions/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async updateNotificationSettings(settings: any) {
+    const res = await fetch(`${API_BASE}/admin/notification-settings`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(settings)
+    });
+    return handleResponse(res);
+  },
+
+  // Infrastructure
   async createUser(user: any) {
     const res = await fetch(`${API_BASE}/admin/users`, { 
       method: 'POST', 

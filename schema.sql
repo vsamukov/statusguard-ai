@@ -1,19 +1,18 @@
+
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Migration: Detect and fix old templates table structure if necessary
+-- Migration: Detect and fix old tables
 DO $$ 
 BEGIN 
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'templates') THEN
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='templates' AND column_name='component_id') THEN
-            -- Dropping the table to allow the new schema definition to take effect.
-            -- This ensures the templates table matches the new name-based logic.
             DROP TABLE templates CASCADE;
         END IF;
     END IF;
 END $$;
 
--- Users table for authentication
+-- Users table
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT UNIQUE NOT NULL,
@@ -46,7 +45,7 @@ CREATE TABLE IF NOT EXISTS components (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Templates table (associated by name)
+-- Templates table
 CREATE TABLE IF NOT EXISTS templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     component_name TEXT NOT NULL,
@@ -67,6 +66,19 @@ CREATE TABLE IF NOT EXISTS incidents (
     end_time TIMESTAMP WITH TIME ZONE
 );
 
+-- Subscriptions table
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Notification settings table
+CREATE TABLE IF NOT EXISTS notification_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 -- Audit logs table
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -78,10 +90,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indexes for performance
+-- Default templates
+INSERT INTO notification_settings (key, value) VALUES 
+('incident_new_template', 'New Incident: {title} affecting {component} in {service} ({region}). Severity: {severity}. Visit status page for details.'),
+('incident_resolved_template', 'Resolved: The issue with {component} ({title}) has been resolved. Service is back to operational.')
+ON CONFLICT (key) DO NOTHING;
+
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_services_region ON services(region_id);
 CREATE INDEX IF NOT EXISTS idx_components_service ON components(service_id);
 CREATE INDEX IF NOT EXISTS idx_templates_component_name ON templates(component_name);
 CREATE INDEX IF NOT EXISTS idx_incidents_component ON incidents(component_id);
 CREATE INDEX IF NOT EXISTS idx_incidents_active ON incidents(end_time) WHERE end_time IS NULL;
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_email ON subscriptions(email);

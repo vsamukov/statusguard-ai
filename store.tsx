@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppState, Severity, Template } from './types.ts';
+import { AppState, Severity, Template, Subscription, NotificationSettings } from './types.ts';
 import { api } from './services/api.ts';
 
 interface AppContextType {
@@ -18,6 +18,12 @@ interface AppContextType {
   reportIncident: (incident: any) => Promise<void>;
   updateIncident: (id: string, incident: any) => Promise<void>;
   resolveIncident: (incidentId: string) => Promise<void>;
+  subscribe: (email: string) => Promise<void>;
+  unsubscribe: (email: string) => Promise<void>;
+  addSubscriber: (email: string) => Promise<void>;
+  updateSubscriber: (id: string, email: string) => Promise<void>;
+  removeSubscriber: (id: string) => Promise<void>;
+  saveNotificationSettings: (settings: NotificationSettings) => Promise<void>;
   createAdmin: (user: any) => Promise<void>;
   deleteAdmin: (id: string) => Promise<void>;
   login: (credentials: any) => Promise<void>;
@@ -43,6 +49,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     components: [],
     templates: [],
     incidents: [],
+    subscriptions: [],
+    notificationSettings: { incidentNewTemplate: '', incidentResolvedTemplate: '' },
     users: [],
     auditLogs: [],
     isAuthenticated: !!localStorage.getItem(TOKEN_KEY),
@@ -120,6 +128,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateIncident = (id: string, inc: any) => wrapAction(() => api.updateIncident(id, inc));
   const resolveIncident = (id: string) => wrapAction(() => api.resolveIncident(id));
 
+  const subscribe = (email: string) => wrapAction(() => api.subscribe(email));
+  const unsubscribe = (email: string) => wrapAction(() => api.unsubscribe(email));
+  const addSubscriber = (email: string) => wrapAction(() => api.createSubscriber(email));
+  const updateSubscriber = (id: string, email: string) => wrapAction(() => api.updateSubscriber(id, email));
+  const removeSubscriber = (id: string) => wrapAction(() => api.deleteSubscriber(id));
+  const saveNotificationSettings = (settings: NotificationSettings) => wrapAction(() => api.updateNotificationSettings(settings));
+
   const createAdmin = (u: any) => wrapAction(() => api.createUser(u));
   const deleteAdmin = (id: string) => wrapAction(() => api.deleteUser(id));
 
@@ -171,7 +186,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       state, isLoading, addRegion, removeRegion, addService, 
       removeService, addComponent, removeComponent,
       addTemplate, updateTemplate, removeTemplate,
-      reportIncident, updateIncident, resolveIncident, createAdmin, deleteAdmin, login, logout, fetchAdminData,
+      reportIncident, updateIncident, resolveIncident, 
+      subscribe, unsubscribe, addSubscriber, updateSubscriber, removeSubscriber, saveNotificationSettings,
+      createAdmin, deleteAdmin, login, logout, fetchAdminData,
       calculateSLA, setTimezoneOffset
     }}>
       {children}
