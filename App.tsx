@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './store.tsx';
 import PublicDashboard from './components/PublicDashboard.tsx';
-import AdminDashboard from './components/AdminDashboard.tsx';
+// Fix: Import the root AdminDashboard component which accepts the onViewPublic prop
+import AdminDashboard from './AdminDashboard.tsx';
 import LoginPage from './components/LoginPage.tsx';
 
 const TimezoneSelector: React.FC = () => {

@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useApp } from '../store.tsx';
-import { Severity, Incident, Template } from '../types.ts';
-import { geminiService } from '../services/geminiService.ts';
+// Fix: Adjust relative imports for root-level component
+import { useApp } from './store.tsx';
+import { Severity, Incident, Template } from './types.ts';
+import { geminiService } from './services/geminiService.ts';
 
 interface AdminDashboardProps {
   onViewPublic?: () => void;
