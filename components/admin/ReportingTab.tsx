@@ -26,7 +26,13 @@ const ReportingTab: React.FC = () => {
   const [form, setForm] = useState(initialForm);
 
   const activeIncidents = useMemo(() => state.incidents.filter(i => !i.endTime), [state.incidents]);
-  const pastIncidents = useMemo(() => state.incidents.filter(i => !!i.endTime).sort((a,b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()), [state.incidents]);
+  const pastIncidents = useMemo(() => 
+    state.incidents
+      .filter(i => !!i.endTime)
+      .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+      .slice(0, 10), 
+    [state.incidents]
+  );
 
   const filteredServices = useMemo(() => 
     state.services.filter(s => s.regionId === form.regionId), 
@@ -92,7 +98,6 @@ const ReportingTab: React.FC = () => {
       } else {
         await reportIncident(incidentPayload);
         
-        // Save as template if requested
         if (form.saveAsTemplate && form.templateName) {
           const comp = state.components.find(c => c.id === form.componentId);
           if (comp) {
@@ -131,17 +136,17 @@ const ReportingTab: React.FC = () => {
       <div className="lg:col-span-2 space-y-8">
         {/* Creation/Edit Form */}
         <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm relative overflow-hidden">
-          {isProcessing && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center font-bold text-indigo-600">Publishing Update...</div>}
+          {isProcessing && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center font-bold text-indigo-600">Syncing...</div>}
           
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">{editingIncident ? 'Modify Incident' : 'Report New Incident'}</h2>
-              <p className="text-sm text-gray-400 mt-1">Fill in the details below to update status.</p>
+              <h2 className="text-xl font-bold text-gray-900">{editingIncident ? 'Modify Incident Record' : 'Post New Update'}</h2>
+              <p className="text-sm text-gray-400 mt-1">Updates are published to the public dashboard instantly.</p>
             </div>
             <div className="flex gap-2">
               {editingIncident && (
                 <button onClick={handleCancelEdit} className="text-xs font-bold text-gray-400 hover:text-gray-600 uppercase px-3 py-1.5">
-                  Cancel Edit
+                  Cancel
                 </button>
               )}
               <button 
@@ -151,28 +156,27 @@ const ReportingTab: React.FC = () => {
                   isAiSuggesting ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'
                 }`}
               >
-                {isAiSuggesting ? 'Thinking...' : 'AI Refine with Gemini'}
+                {isAiSuggesting ? 'Processing...' : 'Gemini AI Summary'}
               </button>
             </div>
           </div>
 
           <form onSubmit={handleSave} className="space-y-6">
-            {/* Hierarchical Selection */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Region</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Location</label>
                 <select 
                   required
                   className="w-full bg-gray-50 border border-gray-100 p-3 rounded-xl outline-none text-sm font-medium"
                   value={form.regionId}
                   onChange={e => setForm({...form, regionId: e.target.value, serviceId: '', componentId: ''})}
                 >
-                  <option value="">Select Region...</option>
+                  <option value="">Region...</option>
                   {state.regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Service</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Functional Area</label>
                 <select 
                   required
                   disabled={!form.regionId}
@@ -180,12 +184,12 @@ const ReportingTab: React.FC = () => {
                   value={form.serviceId}
                   onChange={e => setForm({...form, serviceId: e.target.value, componentId: ''})}
                 >
-                  <option value="">Select Service...</option>
+                  <option value="">Service...</option>
                   {filteredServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Component</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Impacted Component</label>
                 <select 
                   required
                   disabled={!form.serviceId}
@@ -193,25 +197,24 @@ const ReportingTab: React.FC = () => {
                   value={form.componentId}
                   onChange={e => setForm({...form, componentId: e.target.value})}
                 >
-                  <option value="">Select Component...</option>
+                  <option value="">Component...</option>
                   {filteredComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
             </div>
 
-            {/* Template Selection */}
             {availableTemplates.length > 0 && (
               <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-indigo-600 uppercase">Load Template</span>
-                  <span className="text-[10px] text-indigo-400">Pre-defined responses for this component</span>
+                  <span className="text-[10px] font-black text-indigo-600 uppercase">Load Macro</span>
+                  <span className="text-[10px] text-indigo-400">Apply a pre-defined incident template</span>
                 </div>
                 <select 
                   className="text-xs border border-indigo-200 rounded-lg px-3 py-1.5 bg-white outline-none font-bold"
                   onChange={e => applyTemplate(e.target.value)}
                   defaultValue=""
                 >
-                  <option value="">Choose template...</option>
+                  <option value="">Select template...</option>
                   {availableTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
@@ -220,22 +223,22 @@ const ReportingTab: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Severity</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Urgency</label>
                   <select 
                     className="w-full bg-gray-50 border border-gray-100 p-3.5 rounded-xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all text-sm font-bold"
                     value={form.severity}
                     onChange={e => setForm({...form, severity: e.target.value as Severity})}
                   >
-                    <option value={Severity.DEGRADED}>🟡 Degraded</option>
-                    <option value={Severity.OUTAGE}>🔴 Outage</option>
+                    <option value={Severity.DEGRADED}>🟡 Service Degradation</option>
+                    <option value={Severity.OUTAGE}>🔴 Partial/Major Outage</option>
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Public Title</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Headline</label>
                   <input 
                     required
-                    placeholder="Headline for status page"
-                    className="w-full bg-gray-50 border border-gray-100 p-3.5 rounded-xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all text-sm font-bold placeholder:font-normal"
+                    placeholder="Public headline"
+                    className="w-full bg-gray-50 border border-gray-100 p-3.5 rounded-xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all text-sm font-bold"
                     value={form.title}
                     onChange={e => setForm({...form, title: e.target.value})}
                   />
@@ -243,10 +246,10 @@ const ReportingTab: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Communication Body</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Public Update Message</label>
                 <textarea 
                   required
-                  placeholder="Explain impact and status..."
+                  placeholder="Detailed description of the issue..."
                   rows={5}
                   className="w-full bg-gray-50 border border-gray-100 p-4 rounded-xl outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all text-sm leading-relaxed"
                   value={form.description}
@@ -256,7 +259,7 @@ const ReportingTab: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Start Time (Local)</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Incident Start</label>
                   <input 
                     type="datetime-local" 
                     required
@@ -266,7 +269,7 @@ const ReportingTab: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">End Time (Local)</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Resolved At (optional)</label>
                   <input 
                     type="datetime-local" 
                     className="w-full bg-gray-50 border border-gray-100 p-3 rounded-xl text-xs font-semibold outline-none focus:bg-white"
@@ -276,7 +279,6 @@ const ReportingTab: React.FC = () => {
                 </div>
               </div>
 
-              {/* Save as Template Option (Only for new incidents) */}
               {!editingIncident && (
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -286,12 +288,12 @@ const ReportingTab: React.FC = () => {
                       checked={form.saveAsTemplate}
                       onChange={e => setForm({...form, saveAsTemplate: e.target.checked})}
                     />
-                    <span className="text-xs font-bold text-gray-600">Save as reusable template for this component type</span>
+                    <span className="text-xs font-bold text-gray-600">Save this response as a template for future use</span>
                   </label>
                   {form.saveAsTemplate && (
                     <input 
                       required
-                      placeholder="Template internal name (e.g., DNS Failure)"
+                      placeholder="Template internal name"
                       className="w-full bg-white border border-gray-200 p-2.5 rounded-lg text-xs outline-none focus:border-indigo-500"
                       value={form.templateName}
                       onChange={e => setForm({...form, templateName: e.target.value})}
@@ -301,97 +303,126 @@ const ReportingTab: React.FC = () => {
               )}
             </div>
 
-            <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-3 mt-4">
-              {editingIncident ? 'Update Record' : 'Publish to Status Page'}
+            <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-600/20 transition-all">
+              {editingIncident ? 'Save Changes' : 'Publish Status Update'}
             </button>
           </form>
         </div>
 
-        {/* Past History List */}
+        {/* Enhanced Past History List */}
         <div className="space-y-4">
-          <h3 className="font-bold text-xs uppercase text-gray-400 tracking-widest px-1">Incident History (Resolved)</h3>
-          {pastIncidents.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {pastIncidents.slice(0, 10).map(inc => {
+          <div className="flex justify-between items-end px-1">
+            <h3 className="font-bold text-xs uppercase text-gray-400 tracking-widest">Incident History (Resolved)</h3>
+            <span className="text-[10px] text-gray-300 font-bold">Showing last 10 entries</span>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-3">
+            {pastIncidents.length > 0 ? (
+              pastIncidents.map(inc => {
                 const comp = state.components.find(c => c.id === inc.componentId);
+                const svc = state.services.find(s => s.id === comp?.serviceId);
+                const reg = state.regions.find(r => r.id === svc?.regionId);
+                
                 return (
-                  <div key={inc.id} className="p-5 bg-white border border-gray-100 rounded-2xl shadow-sm group hover:border-indigo-200 transition-all">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-[9px] font-bold text-gray-400 uppercase">{new Date(inc.startTime).toLocaleDateString()}</span>
+                  <div key={inc.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:border-indigo-200 transition-all">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase">{new Date(inc.startTime).toLocaleDateString()}</span>
+                        <span className="text-gray-200">•</span>
+                        <span className="text-[9px] font-black text-indigo-600 uppercase tracking-tighter">{reg?.name} / {comp?.name}</span>
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-800 line-clamp-1">{inc.title}</h4>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right hidden md:block">
+                        <p className="text-[9px] font-bold text-gray-400 uppercase">Duration</p>
+                        <p className="text-[10px] font-bold text-gray-600">
+                          {Math.round((new Date(inc.endTime!).getTime() - new Date(inc.startTime).getTime()) / 60000)} mins
+                        </p>
+                      </div>
                       <button 
                         onClick={() => handleEdit(inc)} 
-                        className="text-[10px] font-bold text-indigo-600 hover:underline"
+                        className="bg-gray-50 text-indigo-600 hover:bg-indigo-600 hover:text-white px-4 py-2 rounded-xl text-[10px] font-bold transition-all border border-indigo-50"
                       >
-                        RE-OPEN / EDIT
+                        EDIT RECORD
                       </button>
                     </div>
-                    <h4 className="text-sm font-bold text-gray-800 line-clamp-1 mb-1">{inc.title}</h4>
-                    <p className="text-[10px] text-indigo-500 font-bold uppercase">{comp?.name || 'Unknown'}</p>
                   </div>
                 );
-              })}
-            </div>
-          ) : (
-            <p className="text-center py-8 text-gray-300 text-xs italic">No resolved history yet.</p>
-          )}
+              })
+            ) : (
+              <div className="p-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                <p className="text-gray-400 text-xs italic font-medium">No historical incidents recorded yet.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       
       <div className="space-y-6">
-        <div className="bg-indigo-900 rounded-2xl p-6 text-white shadow-xl shadow-indigo-900/10">
-          <h3 className="text-sm font-black uppercase tracking-widest mb-4 opacity-60">Operations Center</h3>
-          <div className="space-y-4">
+        <div className="bg-indigo-900 rounded-2xl p-6 text-white shadow-xl">
+          <h3 className="text-xs font-black uppercase tracking-widest mb-4 opacity-50">Monitoring Stats</h3>
+          <div className="space-y-5">
             <div className="flex justify-between items-center">
-              <span className="text-xs font-bold">Active Disruptions</span>
-              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${activeIncidents.length > 0 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-white/10'}`}>
+              <span className="text-xs font-bold text-indigo-200">Active Issues</span>
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${activeIncidents.length > 0 ? 'bg-red-500 shadow-lg shadow-red-500/30' : 'bg-white/10'}`}>
                 {activeIncidents.length}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-xs font-bold">Audited Events</span>
+              <span className="text-xs font-bold text-indigo-200">Historical Total</span>
               <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-white/10">
-                {state.auditLogs.length}
+                {state.incidents.length}
               </span>
+            </div>
+            <div className="pt-2 border-t border-white/10">
+              <p className="text-[9px] font-bold text-indigo-300 uppercase mb-2">Platform Health</p>
+              <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-400 transition-all duration-1000" 
+                  style={{ width: `${Math.max(20, 100 - (activeIncidents.length * 20))}%` }}
+                ></div>
+              </div>
             </div>
           </div>
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-bold text-xs uppercase text-gray-400 tracking-widest px-1">Monitoring: Current Issues</h3>
+          <h3 className="font-bold text-xs uppercase text-gray-400 tracking-widest px-1">Currently Active</h3>
           {activeIncidents.length > 0 ? (
             activeIncidents.map(inc => (
-              <div key={inc.id} className="p-5 bg-white border border-gray-100 rounded-2xl shadow-sm group hover:border-indigo-200 transition-all">
+              <div key={inc.id} className="p-5 bg-white border-2 border-red-50 rounded-2xl shadow-sm hover:border-red-100 transition-all">
                 <div className="flex justify-between items-start mb-3">
                   <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                    inc.severity === Severity.OUTAGE ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
+                    inc.severity === Severity.OUTAGE ? 'bg-red-500 text-white' : 'bg-yellow-400 text-yellow-900'
                   }`}>
                     {inc.severity}
                   </span>
                   <div className="flex gap-2">
                     <button 
                       onClick={() => resolveIncident(inc.id)} 
-                      className="text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded-lg transition-colors"
+                      className="text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded-lg"
                     >
                       RESOLVE
                     </button>
                     <button 
                       onClick={() => handleEdit(inc)} 
-                      className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg transition-colors"
+                      className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg"
                     >
                       EDIT
                     </button>
                   </div>
                 </div>
-                <h4 className="text-sm font-bold text-gray-800 line-clamp-2 leading-tight mb-2">{inc.title}</h4>
-                <p className="text-[10px] text-gray-400 font-medium italic">Alerted {new Date(inc.startTime).toLocaleTimeString()}</p>
+                <h4 className="text-sm font-bold text-gray-800 leading-snug mb-2">{inc.title}</h4>
+                <p className="text-[9px] text-gray-400 font-bold uppercase">Time elapsed: {Math.round((Date.now() - new Date(inc.startTime).getTime()) / 60000)} mins</p>
               </div>
             ))
           ) : (
-            <div className="p-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto mb-2 text-emerald-400 shadow-sm">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7"></path></svg>
+            <div className="p-8 text-center bg-emerald-50 rounded-2xl border border-dashed border-emerald-100">
+              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto mb-3 text-emerald-500 shadow-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
               </div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Systems Clear</p>
+              <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Normal Operations</p>
             </div>
           )}
         </div>
