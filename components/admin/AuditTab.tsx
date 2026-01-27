@@ -5,20 +5,45 @@ import { useApp } from '../../store.tsx';
 const AuditTab: React.FC = () => {
   const { state, fetchAdminData } = useApp();
 
+  const getBadgeStyles = (actionType: string) => {
+    // Red for incident reporting and deletions
+    if (actionType === 'CREATE_INCIDENT' || actionType.startsWith('DELETE')) {
+      return 'bg-red-50 text-red-600 border-red-100';
+    }
+    // Green for resolutions
+    if (actionType === 'RESOLVE_INCIDENT') {
+      return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+    }
+    // Blue/Indigo for infrastructure creation
+    if (actionType.startsWith('CREATE')) {
+      return 'bg-indigo-50 text-indigo-600 border-indigo-100';
+    }
+    // Subtle indigo for updates
+    if (actionType.startsWith('UPDATE')) {
+      return 'bg-blue-50 text-blue-600 border-blue-100';
+    }
+    return 'bg-gray-100 text-gray-600 border-gray-200';
+  };
+
   return (
     <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
       <div className="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
-        <h2 className="font-bold text-gray-800">Security Audit Logs</h2>
-        <button onClick={fetchAdminData} className="text-xs font-bold text-indigo-600 uppercase">Refresh</button>
+        <div>
+          <h2 className="font-bold text-gray-800">Security Audit Logs</h2>
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Traceability and Compliance History</p>
+        </div>
+        <button onClick={fetchAdminData} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100">
+          Sync Logs
+        </button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="bg-gray-50 border-b font-bold text-gray-400 uppercase">
             <tr>
-              <th className="px-6 py-4">Time</th>
+              <th className="px-6 py-4">Timestamp</th>
               <th className="px-6 py-4">User</th>
-              <th className="px-6 py-4">Action</th>
-              <th className="px-6 py-4">Summary</th>
+              <th className="px-6 py-4">Operation</th>
+              <th className="px-6 py-4">Resource Target</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -33,16 +58,15 @@ const AuditTab: React.FC = () => {
                   <span className="font-bold text-gray-800">{log.username}</span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${
-                    log.actionType.startsWith('DELETE') ? 'bg-red-50 text-red-600' :
-                    log.actionType.startsWith('CREATE') ? 'bg-indigo-50 text-indigo-600' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
+                  <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border ${getBadgeStyles(log.actionType)}`}>
                     {log.actionType.replace('_', ' ')}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-gray-600 truncate max-w-xs">
-                  {log.targetName}
+                <td className="px-6 py-4">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-gray-700 truncate max-w-xs">{log.targetName}</span>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase">{log.targetType}</span>
+                  </div>
                 </td>
               </tr>
             ))}

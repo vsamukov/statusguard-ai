@@ -16,7 +16,7 @@ export const incidentService = {
       
       const incidentId = res.rows[0].id;
 
-      // 2. Log audit
+      // 2. Log audit - Highlighted RED in UI
       await auditService.log(username, 'CREATE_INCIDENT', 'INCIDENT', data.title, { severity: data.severity });
 
       // 3. Notify (Async)
@@ -48,10 +48,14 @@ export const incidentService = {
         [title, description, severity, startTime, endTime, componentId, id]
       );
 
-      await auditService.log(username, 'UPDATE_INCIDENT', 'INCIDENT', title);
-
       const isNowResolved = endTime !== null;
-      if (isNowResolved && !wasResolved) {
+      const isNewlyResolved = isNowResolved && !wasResolved;
+      
+      // Determine audit action type: RESOLVE_INCIDENT vs UPDATE_INCIDENT
+      const actionType = isNewlyResolved ? 'RESOLVE_INCIDENT' : 'UPDATE_INCIDENT';
+      await auditService.log(username, actionType, 'INCIDENT', title);
+
+      if (isNewlyResolved) {
         this.notify(id, 'RESOLVED');
       }
 
