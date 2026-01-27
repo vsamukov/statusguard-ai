@@ -23,6 +23,7 @@ const SubscriptionsTab: React.FC = () => {
   const fetchList = useCallback(async () => {
     setIsListLoading(true);
     try {
+      // Fetch 10 subscribers per page as requested
       const data = await api.getSubscribers(page, 10, search);
       setSubscribers(data.items);
       setTotal(data.total);
@@ -116,7 +117,7 @@ const SubscriptionsTab: React.FC = () => {
             <div className="relative w-full md:w-64">
               <input 
                 type="text"
-                placeholder="Search emails..."
+                placeholder="Search emails (e.g. *gmail*)"
                 className="w-full bg-gray-50 border border-gray-200 pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
@@ -166,8 +167,8 @@ const SubscriptionsTab: React.FC = () => {
                             value={editingSub.email}
                             onChange={e => setEditingSub({ ...editingSub, email: e.target.value })}
                           />
-                          <button type="submit" className="text-emerald-600 font-bold text-xs uppercase">Save</button>
-                          <button type="button" onClick={() => setEditingSub(null)} className="text-gray-400 font-bold text-xs uppercase">Cancel</button>
+                          <button type="submit" className="text-emerald-600 font-bold text-xs uppercase hover:underline">Save</button>
+                          <button type="button" onClick={() => setEditingSub(null)} className="text-gray-400 font-bold text-xs uppercase hover:underline">Cancel</button>
                         </form>
                       ) : (
                         <span className="text-sm font-bold text-gray-800">{sub.email}</span>

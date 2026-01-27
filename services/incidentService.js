@@ -28,19 +28,29 @@ export const incidentService = {
 
   async updateIncident(username, id, data) {
     return await withTransaction(async (client) => {
-      const current = await client.query('SELECT end_time, title FROM incidents WHERE id = $1', [id]);
-      if (current.rows.length === 0) throw new Error('Incident not found');
+      // Fetch the existing record to allow partial updates
+      const currentRes = await client.query('SELECT * FROM incidents WHERE id = $1', [id]);
+      if (currentRes.rows.length === 0) throw new Error('Incident not found');
       
-      const wasResolved = current.rows[0].end_time !== null;
+      const row = currentRes.rows[0];
+      const wasResolved = row.end_time !== null;
+
+      // Merge provided data with existing row data (handle partial updates)
+      const title = data.title !== undefined ? data.title : row.title;
+      const description = data.description !== undefined ? data.description : row.description;
+      const severity = data.severity !== undefined ? data.severity : row.severity;
+      const startTime = data.startTime !== undefined ? data.startTime : row.start_time;
+      const endTime = data.endTime !== undefined ? data.endTime : row.end_time;
+      const componentId = data.componentId !== undefined ? data.componentId : row.component_id;
 
       const res = await client.query(
         'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING id',
-        [data.title, data.description, data.severity, data.startTime, data.endTime, data.componentId, id]
+        [title, description, severity, startTime, endTime, componentId, id]
       );
 
-      await auditService.log(username, 'UPDATE_INCIDENT', 'INCIDENT', data.title);
+      await auditService.log(username, 'UPDATE_INCIDENT', 'INCIDENT', title);
 
-      const isNowResolved = data.endTime !== null;
+      const isNowResolved = endTime !== null;
       if (isNowResolved && !wasResolved) {
         this.notify(id, 'RESOLVED');
       }
