@@ -249,12 +249,19 @@ const PublicDashboard: React.FC = () => {
                 <div className="space-y-4">
                   {incidents.map(incident => {
                     const comp = state.components.find(c => c.id === incident.componentId);
+                    const svc = state.services.find(s => s.id === comp?.serviceId);
+                    const region = state.regions.find(r => r.id === svc?.regionId);
+
                     return (
                       <div key={incident.id} className="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <h4 className="font-bold text-gray-800">{incident.title}</h4>
-                            <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-tight">Component: {comp?.name || 'Unknown'}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-tight">Component: {comp?.name || 'Unknown'}</span>
+                              <span className="text-gray-300">•</span>
+                              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tight">Region: {region?.name || 'Global'}</span>
+                            </div>
                           </div>
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
                             incident.severity === Severity.OUTAGE ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'

@@ -5,6 +5,7 @@ import ReportingTab from './components/admin/ReportingTab.tsx';
 import ConfigurationTab from './components/admin/ConfigurationTab.tsx';
 import TemplatesTab from './components/admin/TemplatesTab.tsx';
 import AuditTab from './components/admin/AuditTab.tsx';
+import SubscriptionsTab from './components/admin/SubscriptionsTab.tsx';
 
 interface AdminDashboardProps {
   onViewPublic?: () => void;
@@ -12,7 +13,7 @@ interface AdminDashboardProps {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
   const { state, logout } = useApp();
-  const [activeTab, setActiveTab] = useState<'reporting' | 'config' | 'templates' | 'audit'>('reporting');
+  const [activeTab, setActiveTab] = useState<'reporting' | 'config' | 'templates' | 'audit' | 'subscriptions'>('reporting');
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -30,7 +31,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
 
         <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
           <nav className="flex bg-gray-100 p-1.5 rounded-2xl shadow-inner flex-1 md:flex-none">
-            {(['reporting', 'config', 'templates', 'audit'] as const).map(t => (
+            {(['reporting', 'config', 'templates', 'subscriptions', 'audit'] as const).map(t => (
               <button 
                 key={t}
                 onClick={() => setActiveTab(t)}
@@ -72,6 +73,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onViewPublic }) => {
         {activeTab === 'config' && <ConfigurationTab />}
         {activeTab === 'templates' && <TemplatesTab />}
         {activeTab === 'audit' && <AuditTab />}
+        {activeTab === 'subscriptions' && <SubscriptionsTab />}
       </main>
 
       <footer className="mt-16 pt-8 border-t border-gray-100 text-center">
