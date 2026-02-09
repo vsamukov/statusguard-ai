@@ -77,7 +77,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       if (IS_HUB_MODE) {
         if (!remoteApi || !activeDashboard) return;
-        // Cast remoteApi to any because TS doesn't track cross-block narrowing from IS_HUB_MODE correctly here
+        
+        // Reset local data before fetching to avoid stale views
+        setState(prev => ({
+          ...prev,
+          regions: [],
+          services: [],
+          components: [],
+          templates: [],
+          incidents: [],
+          auditLogs: [],
+          subscriptions: []
+        }));
+
         const [status, admin] = await Promise.all([
           (remoteApi as any).getStatus(),
           (remoteApi as any).getAdminData()

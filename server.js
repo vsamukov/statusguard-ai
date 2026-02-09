@@ -21,6 +21,17 @@ app.use(express.json());
 app.use(cookieParser());
 
 /**
+ * CORS MIDDLEWARE (Critical for Hub Mode)
+ */
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*'); // In production, restrict this to your Hub domain
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-ADMIN-SECRET, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+/**
  * TRANSPILATION MIDDLEWARE
  */
 app.use(async (req, res, next) => {
@@ -67,7 +78,7 @@ if (!IS_HUB) {
     next();
   };
 
-  // Public Status Data - Mapped to camelCase for frontend
+  // Public Status Data
   app.get('/api/status', async (req, res) => {
     try {
       const regions = await pool.query('SELECT id, name FROM regions');
@@ -75,8 +86,6 @@ if (!IS_HUB) {
       const components = await pool.query('SELECT id, service_id as "serviceId", name, description, created_at as "createdAt" FROM components');
       const incidents = await pool.query('SELECT id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime" FROM incidents ORDER BY start_time DESC');
       
-      console.log(`[API] Serving status: ${components.rows.length} components, ${incidents.rows.length} incidents`);
-
       res.json({ 
         regions: regions.rows, 
         services: services.rows, 
@@ -89,7 +98,7 @@ if (!IS_HUB) {
     }
   });
 
-  // Admin Data for Hub - Mapped to camelCase
+  // Admin Data for Hub
   app.get('/api/admin/data', nodeAuth, async (req, res) => {
     try {
       const templates = await pool.query('SELECT id, component_name as "componentName", name, title, description FROM templates');
@@ -123,7 +132,7 @@ if (!IS_HUB) {
     }
   });
 
-  // Incident Management
+  // (rest of the endpoints remain same but ensure nodeAuth is used)
   app.post('/api/admin/incidents', nodeAuth, async (req, res) => {
     try {
       const incident = await incidentService.createIncident(req.user, req.body);
@@ -142,7 +151,6 @@ if (!IS_HUB) {
     }
   });
 
-  // Infrastructure Management
   app.post('/api/admin/regions', nodeAuth, async (req, res) => {
     const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING id, name', [req.body.name]);
     await auditService.log(req.user, 'CREATE_REGION', 'REGION', req.body.name);
@@ -185,7 +193,6 @@ if (!IS_HUB) {
   });
 
   app.post('/api/admin/subscriptions', async (req, res) => {
-    // Public subscription allowed
     try {
       const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [req.body.email]);
       res.json(result.rows[0]);
@@ -195,7 +202,6 @@ if (!IS_HUB) {
   });
 
   app.delete('/api/admin/subscriptions/by-email', async (req, res) => {
-    // Public unsubscription by email
     try {
       await pool.query('DELETE FROM subscriptions WHERE email = $1', [req.body.email]);
       res.json({ success: true });
@@ -248,8 +254,7 @@ if (IS_HUB) {
     const rawDashboards = process.env.DASHBOARDS || '[]';
     DASHBOARD_CONFIGS = JSON.parse(rawDashboards);
   } catch (e) {
-    console.error('[CRITICAL] Failed to parse DASHBOARDS environment variable. Ensure it is valid JSON and properly quoted in .env if it contains # symbols.');
-    console.error('Raw value received:', process.env.DASHBOARDS);
+    console.error('[CRITICAL] Failed to parse DASHBOARDS environment variable.');
   }
 
   const authenticatePortal = (req, res, next) => {
