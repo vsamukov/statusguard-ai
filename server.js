@@ -75,6 +75,8 @@ if (!IS_HUB) {
       const components = await pool.query('SELECT id, service_id as "serviceId", name, description, created_at as "createdAt" FROM components');
       const incidents = await pool.query('SELECT id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime" FROM incidents ORDER BY start_time DESC');
       
+      console.log(`[API] Serving status: ${components.rows.length} components, ${incidents.rows.length} incidents`);
+
       res.json({ 
         regions: regions.rows, 
         services: services.rows, 
@@ -182,9 +184,24 @@ if (!IS_HUB) {
     res.json({ success: true });
   });
 
-  app.post('/api/admin/subscriptions', nodeAuth, async (req, res) => {
-    const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [req.body.email]);
-    res.json(result.rows[0]);
+  app.post('/api/admin/subscriptions', async (req, res) => {
+    // Public subscription allowed
+    try {
+      const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [req.body.email]);
+      res.json(result.rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/subscriptions/by-email', async (req, res) => {
+    // Public unsubscription by email
+    try {
+      await pool.query('DELETE FROM subscriptions WHERE email = $1', [req.body.email]);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.delete('/api/admin/subscriptions/:id', nodeAuth, async (req, res) => {

@@ -12,11 +12,36 @@ const handleResponse = async (res: Response) => {
   return res.json();
 };
 
-// This API client is used by the Admin Portal to talk to the specific Dashboard Nodes
+// This API client is used by the NODE mode to talk to itself (local)
+export const nodeApi = {
+  async getStatus() {
+    const res = await fetch(`/api/status`);
+    return handleResponse(res);
+  },
+  async createSubscriber(email: string) {
+    const res = await fetch(`/api/admin/subscriptions`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }) 
+    });
+    return handleResponse(res);
+  },
+  async deleteSubscriber(email: string) {
+    // In node mode, we use email for public unsubscribe
+    const res = await fetch(`/api/admin/subscriptions/by-email`, { 
+      method: 'DELETE', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }) 
+    });
+    return handleResponse(res);
+  }
+};
+
+// This API client is used by the Admin Portal to talk to specific Dashboard Nodes (Hub Mode)
 export const createRemoteApi = (config: RemoteDashboardConfig) => {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-ADMIN-SECRET': config.adminSecret, // The master key for the specific dashboard node
+    'X-ADMIN-SECRET': config.adminSecret,
   };
 
   const base = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
@@ -115,7 +140,6 @@ export const createRemoteApi = (config: RemoteDashboardConfig) => {
   };
 };
 
-// Internal API for the Admin Portal Hub itself
 export const portalApi = {
   async login(credentials: any) {
     const res = await fetch(`/api/portal/auth`, {

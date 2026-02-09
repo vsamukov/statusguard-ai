@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { AppState, Severity, NotificationSettings, RemoteDashboardConfig } from './types.ts';
-import { portalApi, createRemoteApi } from './services/api.ts';
+import { portalApi, createRemoteApi, nodeApi } from './services/api.ts';
 
 interface AppContextType {
   state: AppState;
@@ -38,6 +38,9 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const TOKEN_KEY = 'voximplant_portal_token';
 const USER_KEY = 'voximplant_portal_user';
 
+// Injected by esbuild in server.js
+const IS_HUB_MODE = (process.env as any).IS_HUB === true;
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>({
     dashboards: [],
@@ -62,40 +65,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [state.dashboards, state.activeDashboardId]
   );
 
-  const remoteApi = useMemo(() => 
-    activeDashboard ? createRemoteApi(activeDashboard) : null, 
-    [activeDashboard]
-  );
+  const remoteApi = useMemo(() => {
+    if (IS_HUB_MODE) {
+      return activeDashboard ? createRemoteApi(activeDashboard) : null;
+    }
+    // In Node mode, the "remote" API is just the local API
+    return nodeApi;
+  }, [activeDashboard]);
 
   const fetchData = useCallback(async () => {
-    if (!remoteApi) return;
     try {
-      const [status, admin] = await Promise.all([
-        remoteApi.getStatus(),
-        remoteApi.getAdminData()
-      ]);
-      setState(prev => ({ ...prev, ...status, ...admin }));
+      if (IS_HUB_MODE) {
+        if (!remoteApi || !activeDashboard) return;
+        // Cast remoteApi to any because TS doesn't track cross-block narrowing from IS_HUB_MODE correctly here
+        const [status, admin] = await Promise.all([
+          (remoteApi as any).getStatus(),
+          (remoteApi as any).getAdminData()
+        ]);
+        setState(prev => ({ ...prev, ...status, ...admin }));
+      } else {
+        // NODE mode: Only status is public
+        const status = await nodeApi.getStatus();
+        setState(prev => ({ ...prev, ...status }));
+      }
     } catch (err) {
-      console.error("Failed to fetch data from remote node", err);
+      console.error("Failed to fetch data", err);
     }
-  }, [remoteApi]);
+  }, [remoteApi, activeDashboard]);
 
   useEffect(() => {
     const init = async () => {
-      if (state.isAuthenticated) {
-        setIsLoading(true);
-        try {
-          const configs = await portalApi.getDashboardConfigs();
-          setState(prev => {
-            const activeId = prev.activeDashboardId || (configs.length > 0 ? configs[0].id : null);
-            return { ...prev, dashboards: configs, activeDashboardId: activeId };
-          });
-        } catch (err) {
-          logout();
-        } finally {
+      setIsLoading(true);
+      if (IS_HUB_MODE) {
+        if (state.isAuthenticated) {
+          try {
+            const configs = await portalApi.getDashboardConfigs();
+            setState(prev => {
+              const activeId = prev.activeDashboardId || (configs.length > 0 ? configs[0].id : null);
+              return { ...prev, dashboards: configs, activeDashboardId: activeId };
+            });
+          } catch (err) {
+            logout();
+          } finally {
+            setIsLoading(false);
+          }
+        } else {
           setIsLoading(false);
         }
       } else {
+        // NODE Mode: Fetch status immediately
+        await fetchData();
         setIsLoading(false);
       }
     };
@@ -103,7 +122,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [state.isAuthenticated]);
 
   useEffect(() => {
-    if (state.activeDashboardId) fetchData();
+    if (IS_HUB_MODE && state.activeDashboardId) {
+      fetchData();
+    }
   }, [state.activeDashboardId, fetchData]);
 
   const wrapAction = async (action: () => Promise<any>) => {
@@ -156,23 +177,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       state, isLoading, switchDashboard,
       fetchAdminData: fetchData,
-      getSubscribers: (p, l, s) => remoteApi!.getSubscribers(p, l, s),
-      addRegion: (n) => wrapAction(() => remoteApi!.createRegion(n)),
-      removeRegion: (id) => wrapAction(() => remoteApi!.deleteRegion(id)),
-      addService: (rid, n, d) => wrapAction(() => remoteApi!.createService(rid, n, d)),
-      removeService: (id) => wrapAction(() => remoteApi!.deleteService(id)),
-      addComponent: (sid, n, d) => wrapAction(() => remoteApi!.createComponent(sid, n, d)),
-      removeComponent: (id) => wrapAction(() => remoteApi!.deleteComponent(id)),
-      addTemplate: (t) => wrapAction(() => remoteApi!.createTemplate(t)),
-      updateTemplate: (id, t) => wrapAction(() => remoteApi!.updateTemplate(id, t)),
-      removeTemplate: (id) => wrapAction(() => remoteApi!.deleteTemplate(id)),
-      reportIncident: (inc) => wrapAction(() => remoteApi!.createIncident(inc)),
-      updateIncident: (id, inc) => wrapAction(() => remoteApi!.updateIncident(id, inc)),
-      resolveIncident: (id) => wrapAction(() => remoteApi!.resolveIncident(id)),
+      getSubscribers: (p, l, s) => (remoteApi as any).getSubscribers(p, l, s),
+      addRegion: (n) => wrapAction(() => (remoteApi as any).createRegion(n)),
+      removeRegion: (id) => wrapAction(() => (remoteApi as any).deleteRegion(id)),
+      addService: (rid, n, d) => wrapAction(() => (remoteApi as any).createService(rid, n, d)),
+      removeService: (id) => wrapAction(() => (remoteApi as any).deleteService(id)),
+      addComponent: (sid, n, d) => wrapAction(() => (remoteApi as any).createComponent(sid, n, d)),
+      removeComponent: (id) => wrapAction(() => (remoteApi as any).deleteComponent(id)),
+      addTemplate: (t) => wrapAction(() => (remoteApi as any).createTemplate(t)),
+      updateTemplate: (id, t) => wrapAction(() => (remoteApi as any).updateTemplate(id, t)),
+      removeTemplate: (id) => wrapAction(() => (remoteApi as any).deleteTemplate(id)),
+      reportIncident: (inc) => wrapAction(() => (remoteApi as any).createIncident(inc)),
+      updateIncident: (id, inc) => wrapAction(() => (remoteApi as any).updateIncident(id, inc)),
+      resolveIncident: (id) => wrapAction(() => (remoteApi as any).resolveIncident(id)),
       addSubscriber: (e) => wrapAction(() => remoteApi!.createSubscriber(e)),
-      updateSubscriber: (id, e) => wrapAction(() => remoteApi!.createSubscriber(e)), // Proxy update
-      removeSubscriber: (id) => wrapAction(() => remoteApi!.deleteSubscriber(id)),
-      saveNotificationSettings: (s) => wrapAction(() => remoteApi!.updateNotificationSettings(s)),
+      updateSubscriber: (id, e) => wrapAction(() => (remoteApi as any).createSubscriber(e)),
+      removeSubscriber: (idOrEmail) => wrapAction(() => remoteApi!.deleteSubscriber(idOrEmail)),
+      saveNotificationSettings: (s) => wrapAction(() => (remoteApi as any).updateNotificationSettings(s)),
       login, logout, setTimezoneOffset, calculateSLA
     }}>
       {children}
