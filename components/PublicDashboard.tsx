@@ -5,7 +5,8 @@ import { Severity, Incident } from '../types.ts';
 import UptimeGraph from './UptimeGraph.tsx';
 
 const PublicDashboard: React.FC = () => {
-  const { state, calculateSLA, subscribe, unsubscribe } = useApp();
+  // Aliasing addSubscriber and removeSubscriber to match existing local naming
+  const { state, calculateSLA, addSubscriber: subscribe, removeSubscriber: unsubscribe } = useApp();
   const [email, setEmail] = useState('');
   const [subStatus, setSubStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -47,6 +48,7 @@ const PublicDashboard: React.FC = () => {
     setErrorMessage('');
     try {
       if (isUnsubscribe) {
+        // NOTE: In a real app, this should probably be an ID or token-based unsubscribe
         await unsubscribe(email);
         setSubStatus('success');
         setErrorMessage('You have been successfully unsubscribed.');

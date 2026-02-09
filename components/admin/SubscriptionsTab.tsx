@@ -2,10 +2,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../store.tsx';
 import { NotificationSettings, Subscription } from '../../types.ts';
-import { api } from '../../services/api.ts';
 
 const SubscriptionsTab: React.FC = () => {
-  const { state, addSubscriber, removeSubscriber, updateSubscriber, saveNotificationSettings } = useApp();
+  const { state, addSubscriber, removeSubscriber, updateSubscriber, saveNotificationSettings, getSubscribers } = useApp();
   
   // Local states for paginated subscriber view
   const [subscribers, setSubscribers] = useState<Subscription[]>([]);
@@ -23,8 +22,8 @@ const SubscriptionsTab: React.FC = () => {
   const fetchList = useCallback(async () => {
     setIsListLoading(true);
     try {
-      // Fetch 10 subscribers per page as requested
-      const data = await api.getSubscribers(page, 10, search);
+      // Fetch 10 subscribers per page as requested via AppContext
+      const data = await getSubscribers(page, 10, search);
       setSubscribers(data.items);
       setTotal(data.total);
     } catch (err) {
@@ -32,7 +31,7 @@ const SubscriptionsTab: React.FC = () => {
     } finally {
       setIsListLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, getSubscribers]);
 
   useEffect(() => {
     fetchList();
