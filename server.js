@@ -14,7 +14,8 @@ import { auditService } from './services/auditService.js';
 
 const app = express();
 const rootPath = path.resolve();
-const IS_HUB = process.env.MODE === 'HUB';
+const MODE = process.env.MODE || 'NODE';
+const IS_HUB = MODE === 'HUB';
 
 app.use(express.json());
 app.use(cookieParser());
@@ -55,37 +56,66 @@ app.use(async (req, res, next) => {
  * ---------------------------------------------------------
  */
 if (!IS_HUB) {
-  console.log('[MODE] Status Page Node');
+  console.log('[SYSTEM] Starting in NODE mode (Status Page)');
 
   const nodeAuth = (req, res, next) => {
     const secret = req.headers['x-admin-secret'];
     if (secret !== process.env.ADMIN_SECRET) {
       return res.status(401).json({ error: 'Unauthorized Node Management' });
     }
-    req.user = 'remote-admin'; // Hub acts as admin
+    req.user = 'remote-admin'; 
     next();
   };
 
-  // Public Status Data
+  // Public Status Data - Mapped to camelCase for frontend
   app.get('/api/status', async (req, res) => {
     try {
-      const regions = await pool.query('SELECT * FROM regions');
-      const services = await pool.query('SELECT * FROM services');
-      const components = await pool.query('SELECT * FROM components');
-      const incidents = await pool.query('SELECT * FROM incidents ORDER BY start_time DESC');
-      res.json({ regions: regions.rows, services: services.rows, components: components.rows, incidents: incidents.rows });
+      const regions = await pool.query('SELECT id, name FROM regions');
+      const services = await pool.query('SELECT id, region_id as "regionId", name, description FROM services');
+      const components = await pool.query('SELECT id, service_id as "serviceId", name, description, created_at as "createdAt" FROM components');
+      const incidents = await pool.query('SELECT id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime" FROM incidents ORDER BY start_time DESC');
+      
+      res.json({ 
+        regions: regions.rows, 
+        services: services.rows, 
+        components: components.rows, 
+        incidents: incidents.rows 
+      });
+    } catch (err) {
+      console.error('DB Error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin Data for Hub - Mapped to camelCase
+  app.get('/api/admin/data', nodeAuth, async (req, res) => {
+    try {
+      const templates = await pool.query('SELECT id, component_name as "componentName", name, title, description FROM templates');
+      const auditLogs = await pool.query('SELECT id, username, action_type as "actionType", target_type as "targetType", target_name as "targetName", details, created_at as "createdAt" FROM audit_logs ORDER BY created_at DESC LIMIT 50');
+      
+      const settingsRows = await pool.query('SELECT key, value FROM notification_settings');
+      const notificationSettings = {
+        incidentNewTemplate: settingsRows.rows.find(r => r.key === 'incident_new_template')?.value || '',
+        incidentResolvedTemplate: settingsRows.rows.find(r => r.key === 'incident_resolved_template')?.value || ''
+      };
+
+      res.json({ templates: templates.rows, auditLogs: auditLogs.rows, notificationSettings });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Admin Data for Hub
-  app.get('/api/admin/data', nodeAuth, async (req, res) => {
+  // Subscriber Management with Pagination
+  app.get('/api/admin/subscribers', nodeAuth, async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const search = req.query.search ? `%${req.query.search}%` : '%';
+
     try {
-      const templates = await pool.query('SELECT * FROM templates');
-      const auditLogs = await pool.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 50');
-      const settings = await pool.query('SELECT * FROM notification_settings');
-      res.json({ templates: templates.rows, auditLogs: auditLogs.rows, notificationSettings: settings.rows });
+      const countRes = await pool.query('SELECT count(*) FROM subscriptions WHERE email LIKE $1', [search]);
+      const itemsRes = await pool.query('SELECT id, email, created_at as "createdAt" FROM subscriptions WHERE email LIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3', [search, limit, offset]);
+      res.json({ total: parseInt(countRes.rows[0].count), items: itemsRes.rows });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -112,7 +142,7 @@ if (!IS_HUB) {
 
   // Infrastructure Management
   app.post('/api/admin/regions', nodeAuth, async (req, res) => {
-    const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING *', [req.body.name]);
+    const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING id, name', [req.body.name]);
     await auditService.log(req.user, 'CREATE_REGION', 'REGION', req.body.name);
     res.json(result.rows[0]);
   });
@@ -124,7 +154,67 @@ if (!IS_HUB) {
     res.json({ success: true });
   });
 
-  // (Additional endpoints for services, components, etc. would go here following the same pattern)
+  app.post('/api/admin/services', nodeAuth, async (req, res) => {
+    const { regionId, name, description } = req.body;
+    const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id as "regionId", name, description', [regionId, name, description]);
+    await auditService.log(req.user, 'CREATE_SERVICE', 'SERVICE', name);
+    res.json(result.rows[0]);
+  });
+
+  app.delete('/api/admin/services/:id', nodeAuth, async (req, res) => {
+    const service = await pool.query('SELECT name FROM services WHERE id = $1', [req.params.id]);
+    await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
+    await auditService.log(req.user, 'DELETE_SERVICE', 'SERVICE', service.rows[0]?.name);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/components', nodeAuth, async (req, res) => {
+    const { serviceId, name, description } = req.body;
+    const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id as "serviceId", name, description', [serviceId, name, description]);
+    await auditService.log(req.user, 'CREATE_COMPONENT', 'COMPONENT', name);
+    res.json(result.rows[0]);
+  });
+
+  app.delete('/api/admin/components/:id', nodeAuth, async (req, res) => {
+    const comp = await pool.query('SELECT name FROM components WHERE id = $1', [req.params.id]);
+    await pool.query('DELETE FROM components WHERE id = $1', [req.params.id]);
+    await auditService.log(req.user, 'DELETE_COMPONENT', 'COMPONENT', comp.rows[0]?.name);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/subscriptions', nodeAuth, async (req, res) => {
+    const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [req.body.email]);
+    res.json(result.rows[0]);
+  });
+
+  app.delete('/api/admin/subscriptions/:id', nodeAuth, async (req, res) => {
+    await pool.query('DELETE FROM subscriptions WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/notification-settings', nodeAuth, async (req, res) => {
+    const { incidentNewTemplate, incidentResolvedTemplate } = req.body;
+    await pool.query('INSERT INTO notification_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['incident_new_template', incidentNewTemplate]);
+    await pool.query('INSERT INTO notification_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['incident_resolved_template', incidentResolvedTemplate]);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/templates', nodeAuth, async (req, res) => {
+    const { componentName, name, title, description } = req.body;
+    const resT = await pool.query('INSERT INTO templates (component_name, name, title, description) VALUES ($1, $2, $3, $4) RETURNING id, component_name as "componentName", name, title, description', [componentName, name, title, description]);
+    res.json(resT.rows[0]);
+  });
+
+  app.put('/api/admin/templates/:id', nodeAuth, async (req, res) => {
+    const { componentName, name, title, description } = req.body;
+    const resT = await pool.query('UPDATE templates SET component_name=$1, name=$2, title=$3, description=$4 WHERE id=$5 RETURNING id, component_name as "componentName", name, title, description', [componentName, name, title, description, req.params.id]);
+    res.json(resT.rows[0]);
+  });
+
+  app.delete('/api/admin/templates/:id', nodeAuth, async (req, res) => {
+    await pool.query('DELETE FROM templates WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  });
 }
 
 /**
@@ -133,7 +223,7 @@ if (!IS_HUB) {
  * ---------------------------------------------------------
  */
 if (IS_HUB) {
-  console.log('[MODE] Portal Hub');
+  console.log('[SYSTEM] Starting in HUB mode (Management Portal)');
   const portalSessions = new Map();
   const DASHBOARD_CONFIGS = JSON.parse(process.env.DASHBOARDS || '[]');
 
@@ -163,4 +253,4 @@ app.use(express.static(rootPath));
 app.get('*', (req, res) => res.sendFile(path.join(rootPath, 'index.html')));
 
 const port = parseInt(process.env.PORT || '3000');
-app.listen(port, () => console.log(`[${process.env.MODE}] listening on port ${port}`));
+app.listen(port, () => console.log(`[SERVICE] Running on port ${port} as ${MODE}`));

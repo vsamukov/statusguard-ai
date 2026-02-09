@@ -10,13 +10,13 @@ export const incidentService = {
     return await withTransaction(async (client) => {
       // 1. Create incident
       const res = await client.query(
-        'INSERT INTO incidents (component_id, title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+        'INSERT INTO incidents (component_id, title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime"',
         [data.componentId, data.title, data.description, data.severity, data.startTime, data.endTime]
       );
       
       const incidentId = res.rows[0].id;
 
-      // 2. Log audit - Highlighted RED in UI
+      // 2. Log audit
       await auditService.log(username, 'CREATE_INCIDENT', 'INCIDENT', data.title, { severity: data.severity });
 
       // 3. Notify (Async)
@@ -28,14 +28,13 @@ export const incidentService = {
 
   async updateIncident(username, id, data) {
     return await withTransaction(async (client) => {
-      // Fetch the existing record to allow partial updates
+      // Fetch the existing record
       const currentRes = await client.query('SELECT * FROM incidents WHERE id = $1', [id]);
       if (currentRes.rows.length === 0) throw new Error('Incident not found');
       
       const row = currentRes.rows[0];
       const wasResolved = row.end_time !== null;
 
-      // Merge provided data with existing row data (handle partial updates)
       const title = data.title !== undefined ? data.title : row.title;
       const description = data.description !== undefined ? data.description : row.description;
       const severity = data.severity !== undefined ? data.severity : row.severity;
@@ -44,14 +43,13 @@ export const incidentService = {
       const componentId = data.componentId !== undefined ? data.componentId : row.component_id;
 
       const res = await client.query(
-        'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING id',
+        'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime"',
         [title, description, severity, startTime, endTime, componentId, id]
       );
 
       const isNowResolved = endTime !== null;
       const isNewlyResolved = isNowResolved && !wasResolved;
       
-      // Determine audit action type: RESOLVE_INCIDENT vs UPDATE_INCIDENT
       const actionType = isNewlyResolved ? 'RESOLVE_INCIDENT' : 'UPDATE_INCIDENT';
       await auditService.log(username, actionType, 'INCIDENT', title);
 
