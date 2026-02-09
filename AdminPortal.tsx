@@ -8,6 +8,18 @@ const AdminPortal: React.FC = () => {
 
   const activeDashboard = state.dashboards.find(d => d.id === state.activeDashboardId);
 
+  const handleViewPublic = () => {
+    if (activeDashboard?.url) {
+      // Ensure the URL is absolute
+      const url = activeDashboard.url.startsWith('http') 
+        ? activeDashboard.url 
+        : `http://${activeDashboard.url}`;
+      window.open(url, '_blank');
+    } else {
+      alert("No public URL configured for this dashboard.");
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <aside className="w-20 lg:w-64 bg-indigo-900 text-white flex flex-col">
@@ -66,7 +78,7 @@ const AdminPortal: React.FC = () => {
 
         <div className="p-8">
            {state.activeDashboardId ? (
-             <AdminDashboard />
+             <AdminDashboard onViewPublic={handleViewPublic} />
            ) : (
              <div className="flex flex-col items-center justify-center h-[60vh] text-center">
                 <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-4">
