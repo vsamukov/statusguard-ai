@@ -91,9 +91,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }));
 
         const [status, admin] = await Promise.all([
-          (remoteApi as any).getStatus(),
-          (remoteApi as any).getAdminData()
+          (remoteApi as any).getStatus().catch((e: any) => { console.error("Status fetch failed", e); return {}; }),
+          (remoteApi as any).getAdminData().catch((e: any) => { console.error("Admin data fetch failed", e); return {}; })
         ]);
+
         setState(prev => ({ ...prev, ...status, ...admin }));
       } else {
         // NODE mode: Only status is public
@@ -101,7 +102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setState(prev => ({ ...prev, ...status }));
       }
     } catch (err) {
-      console.error("Failed to fetch data", err);
+      console.error("Critical error in fetchData", err);
     }
   }, [remoteApi, activeDashboard]);
 
@@ -117,6 +118,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return { ...prev, dashboards: configs, activeDashboardId: activeId };
             });
           } catch (err) {
+            console.error("Auth initialization failed", err);
             logout();
           } finally {
             setIsLoading(false);

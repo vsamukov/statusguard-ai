@@ -17,19 +17,27 @@ const rootPath = path.resolve();
 const MODE = process.env.MODE || 'NODE';
 const IS_HUB = MODE === 'HUB';
 
-app.use(express.json());
-app.use(cookieParser());
-
 /**
- * CORS MIDDLEWARE (Critical for Hub Mode)
+ * 1. GLOBAL CORS MIDDLEWARE (Must be first)
+ * This ensures every response, including errors and preflights, has CORS headers.
  */
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*'); // In production, restrict this to your Hub domain
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, X-ADMIN-SECRET, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  const origin = req.headers.origin;
+  // Allow all origins for development; in production, you can check `origin` against a whitelist
+  res.header('Access-Control-Allow-Origin', origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-ADMIN-SECRET, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400'); // 24 hours cache for preflight
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send();
+  }
   next();
 });
+
+app.use(express.json());
+app.use(cookieParser());
 
 /**
  * TRANSPILATION MIDDLEWARE
@@ -72,6 +80,7 @@ if (!IS_HUB) {
   const nodeAuth = (req, res, next) => {
     const secret = req.headers['x-admin-secret'];
     if (secret !== process.env.ADMIN_SECRET) {
+      console.warn(`[AUTH] Rejected access with secret: ${secret?.substring(0, 3)}...`);
       return res.status(401).json({ error: 'Unauthorized Node Management' });
     }
     req.user = 'remote-admin'; 
@@ -132,7 +141,7 @@ if (!IS_HUB) {
     }
   });
 
-  // (rest of the endpoints remain same but ensure nodeAuth is used)
+  // Incident Management
   app.post('/api/admin/incidents', nodeAuth, async (req, res) => {
     try {
       const incident = await incidentService.createIncident(req.user, req.body);
