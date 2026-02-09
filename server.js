@@ -242,7 +242,15 @@ if (!IS_HUB) {
 if (IS_HUB) {
   console.log('[SYSTEM] Starting in HUB mode (Management Portal)');
   const portalSessions = new Map();
-  const DASHBOARD_CONFIGS = JSON.parse(process.env.DASHBOARDS || '[]');
+  
+  let DASHBOARD_CONFIGS = [];
+  try {
+    const rawDashboards = process.env.DASHBOARDS || '[]';
+    DASHBOARD_CONFIGS = JSON.parse(rawDashboards);
+  } catch (e) {
+    console.error('[CRITICAL] Failed to parse DASHBOARDS environment variable. Ensure it is valid JSON and properly quoted in .env if it contains # symbols.');
+    console.error('Raw value received:', process.env.DASHBOARDS);
+  }
 
   const authenticatePortal = (req, res, next) => {
     const token = req.cookies.session_id || req.headers.authorization?.split(' ')[1];
@@ -252,7 +260,7 @@ if (IS_HUB) {
 
   app.post('/api/portal/auth', (req, res) => {
     const { username, password } = req.body;
-    if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
+    if (username === process.env.ADMIN_USER && username && password === process.env.ADMIN_PASS) {
       const token = crypto.randomBytes(32).toString('hex');
       portalSessions.set(token, username);
       res.cookie('session_id', token, { httpOnly: true });
