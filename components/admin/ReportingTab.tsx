@@ -272,6 +272,36 @@ const ReportingTab: React.FC = () => {
               </div>
             </div>
 
+            {!editingIncident && (
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="checkbox"
+                    id="saveAsTemplate"
+                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    checked={form.saveAsTemplate}
+                    onChange={e => setForm({...form, saveAsTemplate: e.target.checked})}
+                  />
+                  <label htmlFor="saveAsTemplate" className="text-sm font-semibold text-gray-700 cursor-pointer">
+                    Save this as a response template
+                  </label>
+                </div>
+                
+                {form.saveAsTemplate && (
+                  <div className="space-y-2 animate-in slide-in-from-top-1 duration-200">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Template Name</label>
+                    <input 
+                      required
+                      placeholder="e.g. Core API Load Balancing Issue"
+                      className="w-full bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      value={form.templateName}
+                      onChange={e => setForm({...form, templateName: e.target.value})}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             <button 
               type="submit" 
               disabled={isProcessing}
