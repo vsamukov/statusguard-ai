@@ -13,9 +13,7 @@ interface AppContextType {
   // All actions below proxy to the ACTIVE remote dashboard
   addRegion: (name: string) => Promise<void>;
   removeRegion: (id: string) => Promise<void>;
-  addService: (regionId: string, name: string, description: string) => Promise<void>;
-  removeService: (id: string) => Promise<void>;
-  addComponent: (serviceId: string, name: string, description: string) => Promise<void>;
+  addComponent: (regionId: string, name: string, description: string) => Promise<void>;
   removeComponent: (id: string) => Promise<void>;
   addTemplate: (template: any) => Promise<void>;
   updateTemplate: (id: string, template: any) => Promise<void>;
@@ -38,7 +36,6 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const TOKEN_KEY = 'voximplant_portal_token';
 const USER_KEY = 'voximplant_portal_user';
 
-// Injected by esbuild in server.js
 const IS_HUB_MODE = (process.env as any).IS_HUB === true;
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -46,7 +43,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     dashboards: [],
     activeDashboardId: null,
     regions: [],
-    services: [],
     components: [],
     templates: [],
     incidents: [],
@@ -69,7 +65,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (IS_HUB_MODE) {
       return activeDashboard ? createRemoteApi(activeDashboard) : null;
     }
-    // In Node mode, the "remote" API is just the local API
     return nodeApi;
   }, [activeDashboard]);
 
@@ -78,11 +73,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (IS_HUB_MODE) {
         if (!remoteApi || !activeDashboard) return;
         
-        // Reset local data before fetching to avoid stale views
         setState(prev => ({
           ...prev,
           regions: [],
-          services: [],
           components: [],
           templates: [],
           incidents: [],
@@ -97,7 +90,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setState(prev => ({ ...prev, ...status, ...admin }));
       } else {
-        // NODE mode: Only status is public
         const status = await nodeApi.getStatus();
         setState(prev => ({ ...prev, ...status }));
       }
@@ -127,7 +119,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setIsLoading(false);
         }
       } else {
-        // NODE Mode: Fetch status immediately
         await fetchData();
         setIsLoading(false);
       }
@@ -194,9 +185,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       getSubscribers: (p, l, s) => (remoteApi as any).getSubscribers(p, l, s),
       addRegion: (n) => wrapAction(() => (remoteApi as any).createRegion(n)),
       removeRegion: (id) => wrapAction(() => (remoteApi as any).deleteRegion(id)),
-      addService: (rid, n, d) => wrapAction(() => (remoteApi as any).createService(rid, n, d)),
-      removeService: (id) => wrapAction(() => (remoteApi as any).deleteService(id)),
-      addComponent: (sid, n, d) => wrapAction(() => (remoteApi as any).createComponent(sid, n, d)),
+      addComponent: (rid, n, d) => wrapAction(() => (remoteApi as any).createComponent(rid, n, d)),
       removeComponent: (id) => wrapAction(() => (remoteApi as any).deleteComponent(id)),
       addTemplate: (t) => wrapAction(() => (remoteApi as any).createTemplate(t)),
       updateTemplate: (id, t) => wrapAction(() => (remoteApi as any).updateTemplate(id, t)),

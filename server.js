@@ -7,7 +7,7 @@ import fs from 'fs';
 import * as esbuild from 'esbuild';
 import crypto from 'crypto';
 
-// Import Node-specific services (only used if MODE=NODE)
+// Import Node-specific services
 import pool from './lib/db.js';
 import { incidentService } from './services/incidentService.js';
 import { auditService } from './services/auditService.js';
@@ -17,31 +17,20 @@ const rootPath = path.resolve();
 const MODE = process.env.MODE || 'NODE';
 const IS_HUB = MODE === 'HUB';
 
-/**
- * 1. GLOBAL CORS MIDDLEWARE (Must be first)
- * This ensures every response, including errors and preflights, has CORS headers.
- */
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  // Allow all origins for development; in production, you can check `origin` against a whitelist
   res.header('Access-Control-Allow-Origin', origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, X-ADMIN-SECRET, Authorization, X-Requested-With');
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Max-Age', '86400'); // 24 hours cache for preflight
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).send();
-  }
+  res.header('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.status(204).send();
   next();
 });
 
 app.use(express.json());
 app.use(cookieParser());
 
-/**
- * TRANSPILATION MIDDLEWARE
- */
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
   if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) {
@@ -61,77 +50,50 @@ app.use(async (req, res, next) => {
       });
       res.type('application/javascript').send(result.code);
     } catch (err) {
-      console.error(`Transpilation failed:`, err);
       res.status(500).send(`console.error("Transpilation failed");`);
     }
-  } else {
-    next();
-  }
+  } else next();
 });
 
-/**
- * ---------------------------------------------------------
- * NODE MODE: Status Page Logic (Requires Database)
- * ---------------------------------------------------------
- */
 if (!IS_HUB) {
-  console.log('[SYSTEM] Starting in NODE mode (Status Page)');
-
   const nodeAuth = (req, res, next) => {
     const secret = req.headers['x-admin-secret'];
-    if (secret !== process.env.ADMIN_SECRET) {
-      console.warn(`[AUTH] Rejected access with secret: ${secret?.substring(0, 3)}...`);
-      return res.status(401).json({ error: 'Unauthorized Node Management' });
-    }
+    if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
     req.user = 'remote-admin'; 
     next();
   };
 
-  // Public Status Data
   app.get('/api/status', async (req, res) => {
     try {
       const regions = await pool.query('SELECT id, name FROM regions');
-      const services = await pool.query('SELECT id, region_id as "regionId", name, description FROM services');
-      const components = await pool.query('SELECT id, service_id as "serviceId", name, description, created_at as "createdAt" FROM components');
+      const components = await pool.query('SELECT id, region_id as "regionId", name, description, created_at as "createdAt" FROM components');
       const incidents = await pool.query('SELECT id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime" FROM incidents ORDER BY start_time DESC');
-      
-      res.json({ 
-        regions: regions.rows, 
-        services: services.rows, 
-        components: components.rows, 
-        incidents: incidents.rows 
-      });
+      res.json({ regions: regions.rows, components: components.rows, incidents: incidents.rows });
     } catch (err) {
-      console.error('DB Error:', err);
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Admin Data for Hub
   app.get('/api/admin/data', nodeAuth, async (req, res) => {
     try {
       const templates = await pool.query('SELECT id, component_name as "componentName", name, title, description FROM templates');
       const auditLogs = await pool.query('SELECT id, username, action_type as "actionType", target_type as "targetType", target_name as "targetName", details, created_at as "createdAt" FROM audit_logs ORDER BY created_at DESC LIMIT 50');
-      
       const settingsRows = await pool.query('SELECT key, value FROM notification_settings');
       const notificationSettings = {
         incidentNewTemplate: settingsRows.rows.find(r => r.key === 'incident_new_template')?.value || '',
         incidentResolvedTemplate: settingsRows.rows.find(r => r.key === 'incident_resolved_template')?.value || ''
       };
-
       res.json({ templates: templates.rows, auditLogs: auditLogs.rows, notificationSettings });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Subscriber Management with Pagination
   app.get('/api/admin/subscribers', nodeAuth, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const search = req.query.search ? `%${req.query.search}%` : '%';
-
     try {
       const countRes = await pool.query('SELECT count(*) FROM subscriptions WHERE email LIKE $1', [search]);
       const itemsRes = await pool.query('SELECT id, email, created_at as "createdAt" FROM subscriptions WHERE email LIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3', [search, limit, offset]);
@@ -141,23 +103,18 @@ if (!IS_HUB) {
     }
   });
 
-  // Incident Management
   app.post('/api/admin/incidents', nodeAuth, async (req, res) => {
     try {
       const incident = await incidentService.createIncident(req.user, req.body);
       res.json(incident);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   app.put('/api/admin/incidents/:id', nodeAuth, async (req, res) => {
     try {
       const incident = await incidentService.updateIncident(req.user, req.params.id, req.body);
       res.json(incident);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   app.post('/api/admin/regions', nodeAuth, async (req, res) => {
@@ -173,23 +130,9 @@ if (!IS_HUB) {
     res.json({ success: true });
   });
 
-  app.post('/api/admin/services', nodeAuth, async (req, res) => {
-    const { regionId, name, description } = req.body;
-    const result = await pool.query('INSERT INTO services (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id as "regionId", name, description', [regionId, name, description]);
-    await auditService.log(req.user, 'CREATE_SERVICE', 'SERVICE', name);
-    res.json(result.rows[0]);
-  });
-
-  app.delete('/api/admin/services/:id', nodeAuth, async (req, res) => {
-    const service = await pool.query('SELECT name FROM services WHERE id = $1', [req.params.id]);
-    await pool.query('DELETE FROM services WHERE id = $1', [req.params.id]);
-    await auditService.log(req.user, 'DELETE_SERVICE', 'SERVICE', service.rows[0]?.name);
-    res.json({ success: true });
-  });
-
   app.post('/api/admin/components', nodeAuth, async (req, res) => {
-    const { serviceId, name, description } = req.body;
-    const result = await pool.query('INSERT INTO components (service_id, name, description) VALUES ($1, $2, $3) RETURNING id, service_id as "serviceId", name, description', [serviceId, name, description]);
+    const { regionId, name, description } = req.body;
+    const result = await pool.query('INSERT INTO components (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id as "regionId", name, description', [regionId, name, description]);
     await auditService.log(req.user, 'CREATE_COMPONENT', 'COMPONENT', name);
     res.json(result.rows[0]);
   });
@@ -205,18 +148,14 @@ if (!IS_HUB) {
     try {
       const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [req.body.email]);
       res.json(result.rows[0]);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   app.delete('/api/admin/subscriptions/by-email', async (req, res) => {
     try {
       await pool.query('DELETE FROM subscriptions WHERE email = $1', [req.body.email]);
       res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   app.delete('/api/admin/subscriptions/:id', nodeAuth, async (req, res) => {
@@ -249,22 +188,10 @@ if (!IS_HUB) {
   });
 }
 
-/**
- * ---------------------------------------------------------
- * HUB MODE: Management Portal Logic (No Database)
- * ---------------------------------------------------------
- */
 if (IS_HUB) {
-  console.log('[SYSTEM] Starting in HUB mode (Management Portal)');
   const portalSessions = new Map();
-  
   let DASHBOARD_CONFIGS = [];
-  try {
-    const rawDashboards = process.env.DASHBOARDS || '[]';
-    DASHBOARD_CONFIGS = JSON.parse(rawDashboards);
-  } catch (e) {
-    console.error('[CRITICAL] Failed to parse DASHBOARDS environment variable.');
-  }
+  try { DASHBOARD_CONFIGS = JSON.parse(process.env.DASHBOARDS || '[]'); } catch (e) {}
 
   const authenticatePortal = (req, res, next) => {
     const token = req.cookies.session_id || req.headers.authorization?.split(' ')[1];
@@ -279,17 +206,13 @@ if (IS_HUB) {
       portalSessions.set(token, username);
       res.cookie('session_id', token, { httpOnly: true });
       res.json({ token, username });
-    } else {
-      res.status(401).json({ error: 'Invalid Hub Credentials' });
-    }
+    } else res.status(401).json({ error: 'Invalid Credentials' });
   });
 
   app.get('/api/portal/configs', authenticatePortal, (req, res) => res.json(DASHBOARD_CONFIGS));
 }
 
-// Global Static Assets
 app.use(express.static(rootPath));
 app.get('*', (req, res) => res.sendFile(path.join(rootPath, 'index.html')));
-
 const port = parseInt(process.env.PORT || '3000');
-app.listen(port, () => console.log(`[SERVICE] Running on port ${port} as ${MODE}`));
+app.listen(port, () => console.log(`[SERVICE] Running on port ${port}`));

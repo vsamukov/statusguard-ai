@@ -14,8 +14,7 @@ export interface RemoteDashboardConfig {
 }
 
 export interface Region { id: string; name: string; }
-export interface Service { id: string; regionId: string; name: string; description: string; }
-export interface Component { id: string; serviceId: string; name: string; description: string; sla90?: number; createdAt?: string; }
+export interface Component { id: string; regionId: string; name: string; description: string; sla90?: number; createdAt?: string; }
 export interface Template { id: string; componentName: string; name: string; title: string; description: string; }
 export interface Incident { id: string; componentId: string; title: string; description: string; severity: Severity; startTime: string; endTime: string | null; }
 export interface Subscription { id: string; email: string; createdAt: string; }
@@ -30,7 +29,6 @@ export interface AppState {
   
   // Data for the active dashboard
   regions: Region[];
-  services: Service[];
   components: Component[];
   templates: Template[];
   incidents: Incident[];
