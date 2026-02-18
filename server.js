@@ -19,40 +19,50 @@ const IS_HUB = MODE === 'HUB';
 
 // Automated Migration Script
 const migrateDb = async () => {
-  if (IS_HUB) return; // Hub doesn't own a status database directly
+  if (IS_HUB) return; 
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     console.log('[DB] Checking schema version...');
     
-    // Check if we need to migrate from Region -> Service -> Component to Region -> Component
+    // 1. Check if we need to migrate from Region -> Service -> Component to Region -> Component
     const tableCheck = await client.query("SELECT to_regclass('public.services') as exists");
     const hasServicesTable = tableCheck.rows[0].exists !== null;
 
+    // 2. Ensure region_id column exists on components
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='components' AND column_name='region_id'
+    `);
+    const hasRegionId = columnCheck.rows.length > 0;
+
+    if (!hasRegionId) {
+      console.log("[DB] Adding missing 'region_id' column to components...");
+      await client.query('ALTER TABLE components ADD COLUMN region_id UUID REFERENCES regions(id) ON DELETE CASCADE');
+    }
+
     if (hasServicesTable) {
-      console.log("[DB] Migrating schema: Removing 'services' layer and linking components to regions...");
+      console.log("[DB] Migrating data: Mapping components to regions via services...");
       await client.query(`
-        -- 1. Ensure region_id exists on components
-        ALTER TABLE components ADD COLUMN IF NOT EXISTS region_id UUID REFERENCES regions(id) ON DELETE CASCADE;
-        
-        -- 2. Migrate data: Link component to the region its service belonged to
         UPDATE components c 
         SET region_id = s.region_id 
         FROM services s 
         WHERE c.service_id = s.id AND c.region_id IS NULL;
-
-        -- 3. Clean up old columns and tables
+      `);
+      
+      console.log("[DB] Cleaning up old schema layers...");
+      await client.query(`
         ALTER TABLE components DROP COLUMN IF EXISTS service_id;
         DROP TABLE IF EXISTS services CASCADE;
-        
-        console.log("[DB] Migration successful.");
       `);
-    } else {
-      // Ensure the column exists even if services table is already gone (for partial failed states)
-      await client.query('ALTER TABLE components ADD COLUMN IF NOT EXISTS region_id UUID REFERENCES regions(id) ON DELETE CASCADE');
     }
-    client.release();
+
+    console.log("[DB] Schema verification complete.");
   } catch (err) {
-    console.error('[DB] Migration failed or already complete:', err.message);
+    console.error('[DB] Migration error:', err.message);
+  } finally {
+    if (client) client.release();
   }
 };
 
@@ -109,6 +119,7 @@ if (!IS_HUB) {
       const incidents = await pool.query('SELECT id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime" FROM incidents ORDER BY start_time DESC');
       res.json({ regions: regions.rows, components: components.rows, incidents: incidents.rows });
     } catch (err) {
+      console.error('[API ERROR] /api/status:', err.message);
       res.status(500).json({ error: err.message });
     }
   });
