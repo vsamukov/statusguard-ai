@@ -1,10 +1,9 @@
 
 import nodemailer from 'nodemailer';
-import mailchimpFactory from '@mailchimp/mailchimp_transactional';
 
 /**
- * SubscriptionService handles communication with either Mailchimp (Transactional/Mandrill) 
- * or an SMTP server for email broadcasts.
+ * SubscriptionService handles communication with either Mailchimp (via Mandrill SMTP) 
+ * or a generic SMTP server for email broadcasts.
  */
 class SubscriptionService {
   constructor() {
@@ -17,15 +16,23 @@ class SubscriptionService {
       SMTP_SECURE 
     } = process.env;
 
-    this.mode = 'IDLE';
+    this.active = false;
 
-    // 1. Prefer Mailchimp if API key is provided
+    // 1. If Mailchimp API Key is provided, use Mandrill's SMTP Relay
     if (MAILCHIMP_API_KEY && MAILCHIMP_API_KEY !== 'your_mailchimp_api_key_here') {
-      this.mailchimp = mailchimpFactory(MAILCHIMP_API_KEY);
-      this.mode = 'MAILCHIMP';
-      console.log('[SUBSCRIPTION SERVICE] Initialized with Mailchimp Transactional.');
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp.mandrillapp.com',
+        port: 587,
+        secure: false, // Mandrill uses STARTTLS on 587
+        auth: {
+          user: 'mandrill-user', // Mandrill accepts any string here
+          pass: MAILCHIMP_API_KEY,
+        },
+      });
+      this.active = true;
+      console.log('[SUBSCRIPTION SERVICE] Initialized using Mailchimp (Mandrill) SMTP Relay.');
     } 
-    // 2. Fallback to SMTP if Host is provided
+    // 2. Fallback to Custom SMTP if provided
     else if (SMTP_HOST) {
       this.transporter = nodemailer.createTransport({
         host: SMTP_HOST,
@@ -36,16 +43,16 @@ class SubscriptionService {
           pass: SMTP_PASS,
         },
       });
-      this.mode = 'SMTP';
-      console.log('[SUBSCRIPTION SERVICE] Initialized with SMTP.');
+      this.active = true;
+      console.log('[SUBSCRIPTION SERVICE] Initialized using Custom SMTP.');
     } else {
-      console.warn('[SUBSCRIPTION SERVICE] No email provider configured (Mailchimp or SMTP).');
+      console.warn('[SUBSCRIPTION SERVICE] No email provider configured. Emails will be skipped.');
     }
   }
 
   async sendBroadcast({ fromEmail, fromName, subject, html, recipients }) {
-    if (this.mode === 'IDLE') {
-      console.warn('[SUBSCRIPTION SERVICE] No email provider active. Skipping broadcast.');
+    if (!this.active) {
+      console.warn('[SUBSCRIPTION SERVICE] Service inactive. Skipping broadcast.');
       return null;
     }
 
@@ -53,31 +60,19 @@ class SubscriptionService {
     const senderName = fromName || 'Voximplant Status';
 
     try {
-      if (this.mode === 'MAILCHIMP') {
-        const message = {
-          from_email: defaultFrom,
-          from_name: senderName,
-          subject: subject,
-          html: html,
-          to: recipients.map(email => ({ email, type: 'bcc' })),
-        };
-        const response = await this.mailchimp.messages.send({ message });
-        console.log('[SUBSCRIPTION SERVICE] Mailchimp Broadcast Sent:', response);
-        return response;
-      } 
-      
-      if (this.mode === 'SMTP') {
-        const info = await this.transporter.sendMail({
-          from: `"${senderName}" <${defaultFrom}>`,
-          bcc: recipients.join(','),
-          subject: subject,
-          html: html,
-        });
-        console.log('[SUBSCRIPTION SERVICE] SMTP Broadcast Sent:', info.messageId);
-        return info;
-      }
+      // SMTP logic using BCC for bulk recipients to protect privacy
+      const info = await this.transporter.sendMail({
+        from: `"${senderName}" <${defaultFrom}>`,
+        to: defaultFrom, // Send to self
+        bcc: recipients, // Recipients in BCC
+        subject: subject,
+        html: html,
+      });
+
+      console.log('[SUBSCRIPTION SERVICE] SMTP Broadcast Sent Successfully:', info.messageId);
+      return info;
     } catch (error) {
-      console.error(`[SUBSCRIPTION SERVICE] ${this.mode} Error:`, error);
+      console.error(`[SUBSCRIPTION SERVICE] SMTP Error:`, error.message);
       throw error;
     }
   }

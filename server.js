@@ -17,33 +17,47 @@ const rootPath = path.resolve();
 const MODE = process.env.MODE || 'NODE';
 const IS_HUB = MODE === 'HUB';
 
-// Automated Migration Script
+/**
+ * Migration: Ensures the DB schema is upgraded from Service-based to Region-based.
+ */
 const migrateDb = async () => {
   if (IS_HUB) return; 
   let client;
   try {
     client = await pool.connect();
-    console.log('[DB] Checking schema version...');
+    console.log('[DB] Synchronizing schema...');
     
-    // 1. Check if we need to migrate from Region -> Service -> Component to Region -> Component
+    // Ensure regions table exists first
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS regions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Check if services table exists (old schema)
     const tableCheck = await client.query("SELECT to_regclass('public.services') as exists");
     const hasServicesTable = tableCheck.rows[0].exists !== null;
 
-    // 2. Ensure region_id column exists on components
+    // Check if region_id exists on components
     const columnCheck = await client.query(`
       SELECT column_name 
       FROM information_schema.columns 
-      WHERE table_name='components' AND column_name='region_id'
+      WHERE table_schema = 'public' 
+      AND table_name = 'components' 
+      AND column_name = 'region_id'
     `);
     const hasRegionId = columnCheck.rows.length > 0;
 
     if (!hasRegionId) {
-      console.log("[DB] Adding missing 'region_id' column to components...");
+      console.log("[DB] Migrating: Adding 'region_id' column to components...");
       await client.query('ALTER TABLE components ADD COLUMN region_id UUID REFERENCES regions(id) ON DELETE CASCADE');
     }
 
     if (hasServicesTable) {
-      console.log("[DB] Migrating data: Mapping components to regions via services...");
+      console.log("[DB] Migrating: Re-mapping components directly to regions...");
+      // Link components to the region their parent service belonged to
       await client.query(`
         UPDATE components c 
         SET region_id = s.region_id 
@@ -51,16 +65,17 @@ const migrateDb = async () => {
         WHERE c.service_id = s.id AND c.region_id IS NULL;
       `);
       
-      console.log("[DB] Cleaning up old schema layers...");
+      console.log("[DB] Migrating: Dropping legacy services table...");
       await client.query(`
         ALTER TABLE components DROP COLUMN IF EXISTS service_id;
         DROP TABLE IF EXISTS services CASCADE;
       `);
     }
 
-    console.log("[DB] Schema verification complete.");
+    console.log("[DB] Schema is up-to-date.");
   } catch (err) {
-    console.error('[DB] Migration error:', err.message);
+    console.error('[DB] Migration failed:', err.message);
+    // In dev, we log but allow startup; in prod, you might want process.exit(1)
   } finally {
     if (client) client.release();
   }
@@ -120,7 +135,7 @@ if (!IS_HUB) {
       res.json({ regions: regions.rows, components: components.rows, incidents: incidents.rows });
     } catch (err) {
       console.error('[API ERROR] /api/status:', err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'Internal Server Error: ' + err.message });
     }
   });
 
@@ -266,7 +281,13 @@ app.use(express.static(rootPath));
 app.get('*', (req, res) => res.sendFile(path.join(rootPath, 'index.html')));
 
 const port = parseInt(process.env.PORT || '3000');
-app.listen(port, async () => {
-  console.log(`[SERVICE] Running on port ${port}`);
-  await migrateDb();
-});
+
+// Start process: Migration THEN Server
+(async () => {
+  try {
+    await migrateDb();
+    app.listen(port, () => console.log(`[SERVICE] Running on port ${port} (MODE=${MODE})`));
+  } catch (err) {
+    console.error('[FATAL] Service failed to start:', err);
+  }
+})();
