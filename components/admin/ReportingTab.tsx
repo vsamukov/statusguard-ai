@@ -108,12 +108,12 @@ const ReportingTab: React.FC = () => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="lg:col-span-2 space-y-8">
-        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm">
+        <div className={`bg-white p-8 rounded-2xl border transition-all duration-300 shadow-sm ${editingIncident ? 'border-indigo-500 ring-4 ring-indigo-500/5' : 'border-gray-200'}`}>
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-xl font-bold text-gray-900">{editingIncident ? 'Edit Incident' : 'Post Update'}</h2>
             <div className="flex gap-2">
-              {editingIncident && <button onClick={handleCancelEdit} className="text-xs font-bold text-gray-400">Cancel</button>}
-              <button onClick={handleAiSuggest} disabled={isAiSuggesting} className="text-xs font-bold px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl">
+              {editingIncident && <button type="button" onClick={handleCancelEdit} className="text-xs font-bold text-gray-400 hover:text-gray-600 px-2 py-2">Cancel</button>}
+              <button type="button" onClick={handleAiSuggest} disabled={isAiSuggesting} className="text-xs font-bold px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors">
                 {isAiSuggesting ? 'AI...' : 'Gemini AI'}
               </button>
             </div>
@@ -121,40 +121,46 @@ const ReportingTab: React.FC = () => {
 
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select required className="w-full bg-gray-50 border p-3 rounded-xl text-sm" value={form.regionId} onChange={e => setForm({...form, regionId: e.target.value, componentId: ''})}>
+              <select required className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.regionId} onChange={e => setForm({...form, regionId: e.target.value, componentId: ''})}>
                 <option value="">Region...</option>
                 {state.regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
-              <select required disabled={!form.regionId} className="w-full bg-gray-50 border p-3 rounded-xl text-sm" value={form.componentId} onChange={e => setForm({...form, componentId: e.target.value})}>
+              <select required disabled={!form.regionId} className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50" value={form.componentId} onChange={e => setForm({...form, componentId: e.target.value})}>
                 <option value="">Component...</option>
                 {filteredComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
             {availableTemplates.length > 0 && (
-              <select className="w-full text-xs border rounded-lg px-3 py-2 bg-indigo-50 border-indigo-100" onChange={e => applyTemplate(e.target.value)} defaultValue="">
+              <select className="w-full text-xs border rounded-lg px-3 py-2 bg-indigo-50 border-indigo-100 outline-none" onChange={e => applyTemplate(e.target.value)} defaultValue="">
                 <option value="">Templates for {state.components.find(c => c.id === form.componentId)?.name}...</option>
                 {availableTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select className="w-full bg-gray-50 border p-3 rounded-xl text-sm font-bold" value={form.severity} onChange={e => setForm({...form, severity: e.target.value as Severity})}>
+              <select className="w-full bg-gray-50 border p-3 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.severity} onChange={e => setForm({...form, severity: e.target.value as Severity})}>
                 <option value={Severity.DEGRADED}>🟡 Degradation</option>
                 <option value={Severity.OUTAGE}>🔴 Outage</option>
               </select>
-              <input required placeholder="Headline" className="w-full bg-gray-50 border p-3 rounded-xl text-sm font-bold" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+              <input required placeholder="Headline" className="w-full bg-gray-50 border p-3 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
             </div>
 
-            <textarea required placeholder="Message" rows={4} className="w-full bg-gray-50 border p-3 rounded-xl text-sm" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
+            <textarea required placeholder="Message" rows={4} className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input type="datetime-local" required className="w-full bg-gray-50 border p-3 rounded-xl text-xs" value={form.startTime} onChange={e => setForm({...form, startTime: e.target.value})} />
-              <input type="datetime-local" placeholder="End (opt)" className="w-full bg-gray-50 border p-3 rounded-xl text-xs" value={form.endTime} onChange={e => setForm({...form, endTime: e.target.value})} />
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Start Time</label>
+                <input type="datetime-local" required className="w-full bg-gray-50 border p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.startTime} onChange={e => setForm({...form, startTime: e.target.value})} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">End Time (optional)</label>
+                <input type="datetime-local" placeholder="End (opt)" className="w-full bg-gray-50 border p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.endTime} onChange={e => setForm({...form, endTime: e.target.value})} />
+              </div>
             </div>
 
-            <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl">
-              {editingIncident ? 'Update' : 'Publish'}
+            <button type="submit" disabled={isProcessing} className="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/10">
+              {editingIncident ? 'Update Incident' : 'Publish Incident'}
             </button>
           </form>
         </div>
@@ -162,33 +168,51 @@ const ReportingTab: React.FC = () => {
         <div className="space-y-2">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Recent Past</h3>
           {pastIncidents.map(inc => (
-            <div key={inc.id} className="bg-white p-4 rounded-xl border flex items-center justify-between">
-              <span className="text-sm font-bold text-gray-800">{inc.title}</span>
-              <button onClick={() => handleEdit(inc)} className="text-[10px] font-bold text-indigo-600">EDIT</button>
+            <div key={inc.id} className={`bg-white p-4 rounded-xl border flex items-center justify-between transition-all ${editingIncident?.id === inc.id ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-100'}`}>
+              <div className="flex flex-col">
+                 <span className="text-sm font-bold text-gray-800">{inc.title}</span>
+                 <span className="text-[10px] text-gray-400">{new Date(inc.startTime).toLocaleDateString()}</span>
+              </div>
+              <button onClick={() => handleEdit(inc)} className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">EDIT</button>
             </div>
           ))}
+          {pastIncidents.length === 0 && (
+            <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200 text-xs text-gray-400">No recent incidents.</div>
+          )}
         </div>
       </div>
       
       <div className="space-y-6">
-        <div className="bg-indigo-900 rounded-2xl p-6 text-white">
+        <div className="bg-indigo-900 rounded-2xl p-6 text-white shadow-xl shadow-indigo-900/20">
           <h3 className="text-[10px] font-black uppercase tracking-widest mb-4 opacity-50">Operational Summary</h3>
           <div className="flex justify-between items-center text-xs">
-            <span>Active Outages</span>
-            <span className={`font-black ${activeIncidents.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{activeIncidents.length}</span>
+            <span className="font-medium">Active Outages</span>
+            <span className={`font-black text-lg ${activeIncidents.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{activeIncidents.length}</span>
           </div>
         </div>
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Active Now</h3>
           {activeIncidents.map(inc => (
-            <div key={inc.id} className="p-4 bg-white border border-red-100 rounded-xl">
-              <div className="flex justify-between mb-2">
-                <span className="text-[9px] font-black uppercase text-red-600">{inc.severity}</span>
-                <button onClick={() => resolveIncident(inc.id)} className="text-[10px] font-bold text-emerald-600">RESOLVE</button>
+            <div key={inc.id} className={`p-5 bg-white border rounded-2xl transition-all ${editingIncident?.id === inc.id ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-red-100 shadow-sm'}`}>
+              <div className="flex justify-between items-start mb-3">
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${inc.severity === Severity.OUTAGE ? 'bg-red-50 text-red-600' : 'bg-yellow-50 text-yellow-600'}`}>{inc.severity}</span>
+                <div className="flex gap-2">
+                   <button onClick={() => handleEdit(inc)} className="text-[10px] font-bold text-indigo-600 hover:underline">EDIT</button>
+                   <button onClick={() => resolveIncident(inc.id)} className="text-[10px] font-bold text-emerald-600 hover:underline">RESOLVE</button>
+                </div>
               </div>
-              <h4 className="text-sm font-bold text-gray-800">{inc.title}</h4>
+              <h4 className="text-sm font-bold text-gray-800 leading-snug">{inc.title}</h4>
+              <p className="text-[10px] text-gray-400 mt-2 font-medium">Started: {new Date(inc.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           ))}
+          {activeIncidents.length === 0 && (
+            <div className="p-8 text-center bg-emerald-50 rounded-2xl border border-emerald-100">
+               <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto mb-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+               </div>
+               <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Systems Nominal</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
