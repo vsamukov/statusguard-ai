@@ -50,6 +50,10 @@ export const incidentService = {
     });
   },
 
+  async resolveIncident(username, id) {
+    return this.updateIncident(username, id, { endTime: new Date().toISOString() });
+  },
+
   async notify(incidentId, type) {
     try {
       const subscribersRes = await pool.query('SELECT email FROM subscriptions');

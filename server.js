@@ -182,6 +182,13 @@ if (!IS_HUB) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  app.post('/api/admin/incidents/:id/resolve', nodeAuth, async (req, res) => {
+    try {
+      const incident = await incidentService.resolveIncident(req.user, req.params.id);
+      res.json(incident);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   app.post('/api/admin/regions', nodeAuth, async (req, res) => {
     const result = await pool.query('INSERT INTO regions (name) VALUES ($1) RETURNING id, name', [req.body.name]);
     await auditService.log(req.user, 'CREATE_REGION', 'REGION', req.body.name);
