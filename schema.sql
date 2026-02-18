@@ -2,7 +2,8 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Migration: Detect and fix old tables
+-- Migration: Detect and fix old tables (DROPPING ensures the region_id column is created correctly)
+-- Note: In production, you would use ALTER TABLE, but here we provide a clean reset for current dev state.
 DROP TABLE IF EXISTS incidents CASCADE;
 DROP TABLE IF EXISTS components CASCADE;
 DROP TABLE IF EXISTS services CASCADE;
@@ -24,10 +25,10 @@ CREATE TABLE IF NOT EXISTS regions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Components table
+-- Components table (NOW DIRECTLY LINKED TO REGIONS)
 CREATE TABLE IF NOT EXISTS components (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    region_id UUID REFERENCES regions(id) ON DELETE CASCADE,
+    region_id UUID NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -46,7 +47,7 @@ CREATE TABLE IF NOT EXISTS templates (
 -- Incidents table
 CREATE TABLE IF NOT EXISTS incidents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    component_id UUID REFERENCES components(id) ON DELETE CASCADE,
+    component_id UUID NOT NULL REFERENCES components(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT,
     severity TEXT NOT NULL,

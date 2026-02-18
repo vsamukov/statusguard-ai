@@ -17,6 +17,45 @@ const rootPath = path.resolve();
 const MODE = process.env.MODE || 'NODE';
 const IS_HUB = MODE === 'HUB';
 
+// Automated Migration Script
+const migrateDb = async () => {
+  if (IS_HUB) return; // Hub doesn't own a status database directly
+  try {
+    const client = await pool.connect();
+    console.log('[DB] Checking schema version...');
+    
+    // Check if we need to migrate from Region -> Service -> Component to Region -> Component
+    const tableCheck = await client.query("SELECT to_regclass('public.services') as exists");
+    const hasServicesTable = tableCheck.rows[0].exists !== null;
+
+    if (hasServicesTable) {
+      console.log("[DB] Migrating schema: Removing 'services' layer and linking components to regions...");
+      await client.query(`
+        -- 1. Ensure region_id exists on components
+        ALTER TABLE components ADD COLUMN IF NOT EXISTS region_id UUID REFERENCES regions(id) ON DELETE CASCADE;
+        
+        -- 2. Migrate data: Link component to the region its service belonged to
+        UPDATE components c 
+        SET region_id = s.region_id 
+        FROM services s 
+        WHERE c.service_id = s.id AND c.region_id IS NULL;
+
+        -- 3. Clean up old columns and tables
+        ALTER TABLE components DROP COLUMN IF EXISTS service_id;
+        DROP TABLE IF EXISTS services CASCADE;
+        
+        console.log("[DB] Migration successful.");
+      `);
+    } else {
+      // Ensure the column exists even if services table is already gone (for partial failed states)
+      await client.query('ALTER TABLE components ADD COLUMN IF NOT EXISTS region_id UUID REFERENCES regions(id) ON DELETE CASCADE');
+    }
+    client.release();
+  } catch (err) {
+    console.error('[DB] Migration failed or already complete:', err.message);
+  }
+};
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   res.header('Access-Control-Allow-Origin', origin || '*');
@@ -214,5 +253,9 @@ if (IS_HUB) {
 
 app.use(express.static(rootPath));
 app.get('*', (req, res) => res.sendFile(path.join(rootPath, 'index.html')));
+
 const port = parseInt(process.env.PORT || '3000');
-app.listen(port, () => console.log(`[SERVICE] Running on port ${port}`));
+app.listen(port, async () => {
+  console.log(`[SERVICE] Running on port ${port}`);
+  await migrateDb();
+});
