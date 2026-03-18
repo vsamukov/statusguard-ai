@@ -157,7 +157,7 @@ app.use(async (req, res, next) => {
         sourcemap: 'inline',
         define: { 
           'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
-          'process.env.IS_HUB': JSON.stringify(IS_HUB),
+          'process.env.IS_HUB': JSON.stringify(process.env.IS_HUB === 'true' || IS_HUB),
           'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
         }
       });

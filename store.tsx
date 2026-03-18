@@ -36,7 +36,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const TOKEN_KEY = 'voximplant_portal_token';
 const USER_KEY = 'voximplant_portal_user';
 
-const IS_HUB_MODE = (process.env as any).IS_HUB === true;
+const IS_HUB_MODE = String(process.env.IS_HUB) === 'true';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>({

@@ -126,7 +126,7 @@ app.use(async (req, res, next) => {
         sourcemap: 'inline',
         define: { 
           'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
-          'process.env.IS_HUB': JSON.stringify(IS_HUB),
+          'process.env.IS_HUB': JSON.stringify(process.env.IS_HUB === 'true' || IS_HUB),
           'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
         }
       });
@@ -158,6 +158,7 @@ const port = parseInt(process.env.PORT || '3000');
 (async () => {
   try {
     await migrateDb(IS_HUB);
+    console.log(`[SERVICE] Starting in ${MODE} mode (IS_HUB=${IS_HUB})`);
     app.listen(port, '0.0.0.0', () => {
       console.log(`[SERVICE] Running on port ${port} (MODE=${MODE})`);
     });

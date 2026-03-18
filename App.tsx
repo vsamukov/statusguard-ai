@@ -7,7 +7,7 @@ import LoginPage from './components/LoginPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 
 // The server injects this flag during transpilation
-const IS_HUB_MODE = (process.env as any).IS_HUB === true;
+const IS_HUB_MODE = String(process.env.IS_HUB) === 'true';
 
 const AppContent: React.FC = () => {
   const { state, isLoading } = useApp();

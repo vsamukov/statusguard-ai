@@ -5,13 +5,14 @@ const TOKEN_KEY = 'voximplant_portal_token';
 
 const handleResponse = async (res: Response, url: string) => {
   if (!res.ok) {
-    let errorData = {};
+    let errorData: any = {};
+    const text = await res.text();
     try {
-      errorData = await res.json();
+      errorData = JSON.parse(text);
     } catch (e) {
-      errorData = { error: await res.text() || res.statusText };
+      errorData = { error: text || res.statusText };
     }
-    throw new Error((errorData as any).error || `HTTP error! status: ${res.status}`);
+    throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
   }
   return res.json();
 };
@@ -150,8 +151,9 @@ export const createRemoteApi = (config: RemoteDashboardConfig) => {
 
 export const portalApi = {
   async login(credentials: any) {
-    const isHub = process.env.IS_HUB === 'true';
+    const isHub = String(process.env.IS_HUB) === 'true';
     const url = isHub ? `/api/portal/auth` : `/api/auth`;
+    console.log(`[API] Login attempt: isHub=${isHub}, url=${url}`);
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
