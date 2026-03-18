@@ -12,7 +12,22 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
 // In-memory dashboard configs for HUB mode
 let DASHBOARD_CONFIGS: any[] = [];
 try { 
-  DASHBOARD_CONFIGS = JSON.parse(process.env.DASHBOARDS || '[]'); 
+  let dashboardsRaw = (process.env.DASHBOARDS || '[]').trim();
+  console.log(`[HUB] Raw DASHBOARDS: ${dashboardsRaw.substring(0, 50)}...`);
+  // Handle potential extra quotes from env var setting
+  if (dashboardsRaw.startsWith("'") && dashboardsRaw.endsWith("'")) {
+    dashboardsRaw = dashboardsRaw.slice(1, -1);
+  }
+  if (dashboardsRaw.startsWith('"') && dashboardsRaw.endsWith('"')) {
+    dashboardsRaw = dashboardsRaw.slice(1, -1);
+  }
+  
+  console.log(`[HUB] Initializing dashboard configs. Raw length: ${dashboardsRaw.length}`);
+  console.log(`[HUB] Env keys: ${Object.keys(process.env).filter(k => k.includes('DASHBOARD') || k.includes('MODE') || k.includes('IS_HUB'))}`);
+  
+  DASHBOARD_CONFIGS = JSON.parse(dashboardsRaw); 
+  console.log(`[HUB] Successfully parsed ${DASHBOARD_CONFIGS.length} dashboard configs.`);
+  DASHBOARD_CONFIGS.forEach(d => console.log(`[HUB] Dashboard: ${d.name} (${d.id})`));
 } catch (e) {
   console.error('Failed to parse DASHBOARDS env var', e);
 }
@@ -53,6 +68,7 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
 });
 
 router.get('/configs', hubAuth, (req: AuthRequest, res) => {
+  console.log(`[HUB] Fetching configs. Current count: ${DASHBOARD_CONFIGS.length}`);
   res.json(DASHBOARD_CONFIGS);
 });
 

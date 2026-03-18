@@ -17,7 +17,8 @@ import { migrateDb } from './migrate.js';
 const app = express();
 const rootPath = path.resolve();
 const MODE = process.env.MODE || 'NODE';
-const IS_HUB = MODE === 'HUB';
+const IS_HUB = MODE.toUpperCase() === 'HUB' || process.env.IS_HUB === 'true';
+console.log(`[SERVER] MODE: ${MODE}, IS_HUB: ${IS_HUB}`);
 
 // Security Middleware
 app.use(helmet({
