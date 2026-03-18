@@ -97,24 +97,75 @@ app.use(cookieParser());
 
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
-  if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) {
-    const filePath = path.join(rootPath, cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
-    if (!fs.existsSync(filePath)) return next();
+  
+  // Skip if it's an API route or health check
+  if (cleanPath.startsWith('/api') || cleanPath.startsWith('/health')) return next();
+
+  // Ensure we are looking in the project root
+  const projectRoot = process.cwd();
+  let filePath = path.join(projectRoot, cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
+  let loader = null;
+
+  // 1. Try exact path for .ts/.tsx
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    if (cleanPath.endsWith('.ts')) loader = 'ts';
+    else if (cleanPath.endsWith('.tsx')) loader = 'tsx';
+  } 
+  
+  // 2. Try adding extensions if no loader found (for extensionless imports)
+  if (!loader) {
+    const extensions = [
+      { ext: '.tsx', l: 'tsx' },
+      { ext: '.ts', l: 'ts' },
+      { ext: '/index.tsx', l: 'tsx' },
+      { ext: '/index.ts', l: 'ts' }
+    ];
+    for (const { ext, l } of extensions) {
+      const p = filePath + ext;
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        filePath = p;
+        loader = l;
+        break;
+      }
+    }
+  }
+
+  // 3. Try mapping .js requests to .ts/.tsx files
+  if (!loader && cleanPath.endsWith('.js')) {
+    const base = filePath.slice(0, -3);
+    const extensions = [
+      { ext: '.tsx', l: 'tsx' },
+      { ext: '.ts', l: 'ts' }
+    ];
+    for (const { ext, l } of extensions) {
+      const p = base + ext;
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        filePath = p;
+        loader = l;
+        break;
+      }
+    }
+  }
+
+  if (loader) {
     try {
       const content = fs.readFileSync(filePath, 'utf8');
       const result = await esbuild.transform(content, {
-        loader: cleanPath.endsWith('.tsx') ? 'tsx' : 'ts',
+        loader,
         format: 'esm',
         target: 'es2020',
         sourcemap: 'inline',
+        jsx: 'react',
         define: { 
           'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
-          'process.env.IS_HUB': JSON.stringify(IS_HUB)
+          'process.env.IS_HUB': JSON.stringify(IS_HUB),
+          'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
         }
       });
       res.type('application/javascript').send(result.code);
     } catch (err) {
-      res.status(500).send(`console.error("Transpilation failed");`);
+      console.error(`Transpilation failed for ${cleanPath}:`, err);
+      res.status(500).type('application/javascript').send(`console.error("Transpilation failed for ${cleanPath}: ${err.message.replace(/"/g, '\\"')}");`);
     }
   } else next();
 });
