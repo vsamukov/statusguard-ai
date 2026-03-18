@@ -1,27 +1,35 @@
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
+import { JWT_SECRET, ADMIN_SECRET } from '../config.js';
 
 export interface AuthRequest extends Request {
   user?: any;
 }
 
 export const hubAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.cookies.session_id || req.headers.authorization?.split(' ')[1];
+  const cookieToken = req.cookies.session_id;
+  const headerToken = req.headers.authorization?.split(' ')[1];
   
-  if (!token) {
+  // Try cookie first, then header
+  const tokens = [cookieToken, headerToken].filter(Boolean);
+  
+  if (tokens.length === 0) {
     return res.status(401).json({ error: 'Unauthorized: No token provided' });
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  let lastError = null;
+  for (const token of tokens) {
+    try {
+      const decoded = jwt.verify(token!, JWT_SECRET);
+      req.user = decoded;
+      return next();
+    } catch (err) {
+      lastError = err;
+    }
   }
+
+  return res.status(401).json({ error: 'Unauthorized: Invalid token' });
 };
 
 export const nodeAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -39,7 +47,7 @@ export const nodeAuth = (req: AuthRequest, res: Response, next: NextFunction) =>
     }
   }
 
-  if (secret && secret === process.env.ADMIN_SECRET) {
+  if (secret && secret === ADMIN_SECRET) {
     req.user = { role: 'admin', username: 'remote-admin' };
     return next();
   }

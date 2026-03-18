@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import * as esbuild from 'esbuild';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 
 // Import Node-specific services
 import pool from './lib/db.js';
@@ -311,22 +312,42 @@ if (!IS_HUB) {
 }
 
 if (IS_HUB) {
-  const portalSessions = new Map();
+  const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
   let DASHBOARD_CONFIGS = [];
-  try { DASHBOARD_CONFIGS = JSON.parse(process.env.DASHBOARDS || '[]'); } catch (e) {}
+  try { 
+    let dashboardsRaw = (process.env.DASHBOARDS || '[]').trim();
+    if (dashboardsRaw.startsWith("'") && dashboardsRaw.endsWith("'")) dashboardsRaw = dashboardsRaw.slice(1, -1);
+    if (dashboardsRaw.startsWith('"') && dashboardsRaw.endsWith('"')) dashboardsRaw = dashboardsRaw.slice(1, -1);
+    DASHBOARD_CONFIGS = JSON.parse(dashboardsRaw); 
+  } catch (e) {
+    console.error('[HUB] Failed to parse DASHBOARDS:', e.message);
+  }
 
   const authenticatePortal = (req, res, next) => {
     const token = req.cookies.session_id || req.headers.authorization?.split(' ')[1];
-    if (!portalSessions.has(token)) return res.status(401).json({ error: 'Unauthorized' });
-    next();
+    if (!token) return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.user = decoded;
+      next();
+    } catch (err) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    }
   };
 
   app.post('/api/portal/auth', (req, res) => {
     const { username, password } = req.body;
-    if (username === process.env.ADMIN_USER && username && password === process.env.ADMIN_PASS) {
-      const token = crypto.randomBytes(32).toString('hex');
-      portalSessions.set(token, username);
-      res.cookie('session_id', token, { httpOnly: true });
+    const adminUser = process.env.ADMIN_USER || 'admin';
+    const adminPass = process.env.ADMIN_PASS || 'password';
+
+    if (username === adminUser && password === adminPass) {
+      const token = jwt.sign({ username, role: 'hub-admin' }, JWT_SECRET, { expiresIn: '24h' });
+      res.cookie('session_id', token, { 
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000 
+      });
       res.json({ token, username });
     } else res.status(401).json({ error: 'Invalid Credentials' });
   });

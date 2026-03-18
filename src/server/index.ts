@@ -13,11 +13,10 @@ import rateLimit from 'express-rate-limit';
 import nodeRoutes from './routes/node.js';
 import hubRoutes from './routes/hub.js';
 import { migrateDb } from './migrate.js';
+import { MODE, IS_HUB, PORT } from './config.js';
 
 const app = express();
 const rootPath = path.resolve();
-const MODE = process.env.MODE || 'NODE';
-const IS_HUB = MODE.toUpperCase() === 'HUB' || process.env.IS_HUB === 'true';
 console.log(`[SERVER] MODE: ${MODE}, IS_HUB: ${IS_HUB}`);
 
 // Security Middleware
@@ -154,14 +153,12 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(rootPath, 'index.html'));
 });
 
-const port = parseInt(process.env.PORT || '3000');
-
 (async () => {
   try {
     await migrateDb(IS_HUB);
     console.log(`[SERVICE] Starting in ${MODE} mode (IS_HUB=${IS_HUB})`);
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`[SERVICE] Running on port ${port} (MODE=${MODE})`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[SERVICE] Running on port ${PORT} (MODE=${MODE})`);
     });
   } catch (err) {
     console.error('[FATAL] Service failed to start:', err);

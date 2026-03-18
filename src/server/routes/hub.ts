@@ -5,49 +5,23 @@ import bcrypt from 'bcryptjs';
 import { hubAuth, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
 import { loginSchema } from '../utils/schemas.js';
+import { JWT_SECRET, ADMIN_USER, ADMIN_PASS, DASHBOARD_CONFIGS } from '../config.js';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
-
-// In-memory dashboard configs for HUB mode
-let DASHBOARD_CONFIGS: any[] = [];
-try { 
-  let dashboardsRaw = (process.env.DASHBOARDS || '[]').trim();
-  console.log(`[HUB] Raw DASHBOARDS: ${dashboardsRaw.substring(0, 50)}...`);
-  // Handle potential extra quotes from env var setting
-  if (dashboardsRaw.startsWith("'") && dashboardsRaw.endsWith("'")) {
-    dashboardsRaw = dashboardsRaw.slice(1, -1);
-  }
-  if (dashboardsRaw.startsWith('"') && dashboardsRaw.endsWith('"')) {
-    dashboardsRaw = dashboardsRaw.slice(1, -1);
-  }
-  
-  console.log(`[HUB] Initializing dashboard configs. Raw length: ${dashboardsRaw.length}`);
-  console.log(`[HUB] Env keys: ${Object.keys(process.env).filter(k => k.includes('DASHBOARD') || k.includes('MODE') || k.includes('IS_HUB'))}`);
-  
-  DASHBOARD_CONFIGS = JSON.parse(dashboardsRaw); 
-  console.log(`[HUB] Successfully parsed ${DASHBOARD_CONFIGS.length} dashboard configs.`);
-  DASHBOARD_CONFIGS.forEach(d => console.log(`[HUB] Dashboard: ${d.name} (${d.id})`));
-} catch (e) {
-  console.error('Failed to parse DASHBOARDS env var', e);
-}
 
 router.post('/auth', validate(loginSchema), async (req, res) => {
   const { username, password } = req.body;
   
-  const adminUser = process.env.ADMIN_USER || 'admin';
-  const adminPass = process.env.ADMIN_PASS || 'password';
-
-  const isUserMatch = username === adminUser;
+  const isUserMatch = username === ADMIN_USER;
   let isPassMatch = false;
 
   if (isUserMatch) {
     // Check if adminPass is a bcrypt hash
-    if (adminPass.startsWith('$2')) {
-      isPassMatch = await bcrypt.compare(password, adminPass);
+    if (ADMIN_PASS.startsWith('$2')) {
+      isPassMatch = await bcrypt.compare(password, ADMIN_PASS);
     } else {
       // Fallback for plaintext (not recommended for production)
-      isPassMatch = password === adminPass;
+      isPassMatch = password === ADMIN_PASS;
     }
   }
 
@@ -56,8 +30,8 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
     
     res.cookie('session_id', token, { 
       httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: true, 
+      sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
     

@@ -16,9 +16,9 @@ import {
 
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../config.js';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
 
 router.post('/auth', validate(loginSchema), async (req, res) => {
   const { username, password } = req.body;
