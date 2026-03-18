@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useApp } from '../store.tsx';
+import { useApp } from '../store';
 
 interface LoginPageProps {
   onCancel: () => void;

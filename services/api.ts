@@ -1,5 +1,5 @@
 
-import { RemoteDashboardConfig } from '../types.ts';
+import { RemoteDashboardConfig } from '../types';
 
 const TOKEN_KEY = 'voximplant_portal_token';
 
@@ -23,7 +23,7 @@ export const nodeApi = {
     return handleResponse(res, url);
   },
   async createSubscriber(email: string) {
-    const url = `/api/admin/subscriptions`;
+    const url = `/api/subscriptions`;
     const res = await fetch(url, { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
@@ -32,13 +32,7 @@ export const nodeApi = {
     return handleResponse(res, url);
   },
   async deleteSubscriber(email: string) {
-    const url = `/api/admin/subscriptions/by-email`;
-    const res = await fetch(url, { 
-      method: 'DELETE', 
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }) 
-    });
-    return handleResponse(res, url);
+    throw new Error('Public unsubscribe by email is disabled for security. Please use the link in your email.');
   }
 };
 
@@ -102,7 +96,7 @@ export const createRemoteApi = (config: RemoteDashboardConfig) => {
       return handleResponse(res, url);
     },
     async createSubscriber(email: string) {
-      const url = `${base}/api/admin/subscriptions`;
+      const url = `${base}/api/subscriptions`;
       const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify({ email }) });
       return handleResponse(res, url);
     },
@@ -156,7 +150,8 @@ export const createRemoteApi = (config: RemoteDashboardConfig) => {
 
 export const portalApi = {
   async login(credentials: any) {
-    const url = `/api/portal/auth`;
+    const isHub = process.env.IS_HUB === 'true';
+    const url = isHub ? `/api/portal/auth` : `/api/auth`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

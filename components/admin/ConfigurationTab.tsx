@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useApp } from '../../store.tsx';
+import { useApp } from '../../store';
 
 const ConfigurationTab: React.FC = () => {
   const { state, addRegion, removeRegion, addComponent, removeComponent } = useApp();

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Severity } from '../types.ts';
-import { useApp } from '../store.tsx';
+import { Severity } from '../types';
+import { useApp } from '../store';
 
 interface UptimeGraphProps {
   componentId: string;

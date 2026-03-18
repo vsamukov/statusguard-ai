@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useApp } from '../../store.tsx';
+import { useApp } from '../../store';
 
 const TemplatesTab: React.FC = () => {
   const { state, addTemplate, updateTemplate, removeTemplate } = useApp();

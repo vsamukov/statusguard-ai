@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { AppState, Severity, NotificationSettings, RemoteDashboardConfig } from './types.ts';
-import { portalApi, createRemoteApi, nodeApi } from './services/api.ts';
+import { AppState, Severity, NotificationSettings, RemoteDashboardConfig } from './types';
+import { portalApi, createRemoteApi, nodeApi } from './services/api';
 
 interface AppContextType {
   state: AppState;
@@ -124,7 +124,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
     init();
-  }, [state.isAuthenticated]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.isAuthenticated, fetchData]);
 
   useEffect(() => {
     if (IS_HUB_MODE && state.activeDashboardId) {
@@ -163,19 +164,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = Date.now();
     const periodStart = now - (days * 24 * 60 * 60 * 1000);
     const totalMinutes = days * 24 * 60;
-    const componentIncidents = state.incidents.filter(i => i.componentId === componentId);
+    
+    // Filter incidents that overlap with the period and affect this component
+    const componentIncidents = state.incidents.filter(i => 
+      i.componentId === componentId && 
+      new Date(i.startTime).getTime() < now &&
+      (!i.endTime || new Date(i.endTime).getTime() > periodStart)
+    );
+
     let totalDowntimeMinutes = 0;
     componentIncidents.forEach(inc => {
       const start = new Date(inc.startTime).getTime();
       const end = inc.endTime ? new Date(inc.endTime).getTime() : now;
+      
       const incStart = Math.max(start, periodStart);
       const incEnd = Math.min(end, now);
+      
       if (incEnd > incStart) {
-        const impactFactor = inc.severity === Severity.OUTAGE ? 1 : 0.5;
+        // More standard impact factors: Outage = 100%, Partial = 50%, Degraded = 25%
+        let impactFactor = 0;
+        switch (inc.severity) {
+          case Severity.OUTAGE: impactFactor = 1; break;
+          case Severity.DEGRADED: impactFactor = 0.5; break;
+          default: impactFactor = 0;
+        }
         totalDowntimeMinutes += ((incEnd - incStart) / 60000) * impactFactor;
       }
     });
-    return Math.max(0, Math.min(100, parseFloat(((totalMinutes - totalDowntimeMinutes) / totalMinutes * 100).toFixed(3))));
+
+    const uptimePercentage = ((totalMinutes - totalDowntimeMinutes) / totalMinutes) * 100;
+    return Math.max(0, Math.min(100, parseFloat(uptimePercentage.toFixed(3))));
   }, [state.incidents]);
 
   return (

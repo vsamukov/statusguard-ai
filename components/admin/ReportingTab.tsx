@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../../store.tsx';
-import { Severity, Incident } from '../../types.ts';
-import { geminiService } from '../../services/geminiService.ts';
+import { useApp } from '../../store';
+import { Severity, Incident } from '../../types';
+import { geminiService } from '../../services/geminiService';
 
 const ReportingTab: React.FC = () => {
   const { state, reportIncident, updateIncident, resolveIncident, addTemplate } = useApp();
@@ -101,7 +101,7 @@ const ReportingTab: React.FC = () => {
     setIsAiSuggesting(true);
     try {
       const summary = await geminiService.generateIncidentSummary(form.title, form.description);
-      setForm({ ...form, description: summary });
+      setForm({ ...form, description: summary || form.description });
     } catch (err) {} finally { setIsAiSuggesting(false); }
   };
 

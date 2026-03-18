@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useApp } from '../../store.tsx';
+import { useApp } from '../../store';
 
 const AuditTab: React.FC = () => {
   const { state, fetchAdminData } = useApp();

@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { useApp } from '../store.tsx';
-import { Severity, Incident } from '../types.ts';
-import UptimeGraph from './UptimeGraph.tsx';
+import { useApp } from '../store';
+import { Severity, Incident } from '../types';
+import UptimeGraph from './UptimeGraph';
 
 const PublicDashboard: React.FC = () => {
   const { state, calculateSLA, addSubscriber: subscribe, removeSubscriber: unsubscribe } = useApp();
@@ -30,20 +30,14 @@ const PublicDashboard: React.FC = () => {
     return adjustedDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
   };
 
-  const handleSubscribe = async (e: React.FormEvent, isUnsubscribe = false) => {
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
     setSubStatus('loading');
     setErrorMessage('');
     try {
-      if (isUnsubscribe) {
-        await unsubscribe(email);
-        setSubStatus('success');
-        setErrorMessage('You have been successfully unsubscribed.');
-      } else {
-        await subscribe(email);
-        setSubStatus('success');
-      }
+      await subscribe(email);
+      setSubStatus('success');
       setEmail('');
     } catch (err: any) {
       setSubStatus('error');
@@ -58,13 +52,21 @@ const PublicDashboard: React.FC = () => {
     return Severity.OPERATIONAL;
   };
 
+  const regionsWithComponents = React.useMemo(() => {
+    return state.regions.map(region => ({
+      ...region,
+      components: state.components.filter(c => c.regionId === region.id)
+    })).filter(r => r.components.length > 0);
+  }, [state.regions, state.components]);
+
   const globalStatus = React.useMemo(() => {
     if (state.components.length === 0) return { label: 'System Initializing', color: 'bg-indigo-500', sub: 'Monitoring is starting up...' };
+    
     const statuses = state.components.map(c => getComponentStatus(c.id));
     if (statuses.includes(Severity.OUTAGE)) return { label: 'System Outage', color: 'bg-red-600', sub: 'Major disruptions are occurring' };
     if (statuses.includes(Severity.DEGRADED)) return { label: 'Partial Degradation', color: 'bg-yellow-500', sub: 'Some services are experiencing issues' };
     return { label: 'All Systems Operational', color: 'bg-emerald-500', sub: 'Services are running optimally' };
-  }, [state, state.incidents, state.components]);
+  }, [state.components, state.incidents]);
 
   const pastIncidentsByDate = React.useMemo(() => {
     const ninetyDaysAgo = new Date();
@@ -139,45 +141,53 @@ const PublicDashboard: React.FC = () => {
       )}
 
       <div className="space-y-12 mb-16">
-        {state.regions.map(region => (
-          <div key={region.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-             <div className="p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                <h2 className="text-sm font-black text-gray-900 uppercase tracking-widest">{region.name}</h2>
-                <div className="flex items-center gap-2">
-                   <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                   <span className="text-[10px] font-bold text-gray-400 uppercase">Operational Status</span>
-                </div>
-             </div>
-             <div className="divide-y divide-gray-50">
-               {state.components.filter(c => c.regionId === region.id).map(comp => {
-                  const compStatus = getComponentStatus(comp.id);
-                  const sla = calculateSLA(comp.id);
-                  return (
-                    <div key={comp.id} className="p-6 hover:bg-gray-50/50 transition-colors">
-                       <div className="flex justify-between items-center mb-3">
-                          <div>
-                             <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                                {comp.name}
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${sla < 99.9 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                                   90D SLA: {sla}%
-                                </span>
-                             </h4>
-                             <p className="text-[10px] text-gray-400 mt-0.5">{comp.description}</p>
-                          </div>
-                          <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                             compStatus === Severity.OPERATIONAL ? 'bg-emerald-50 text-emerald-600' :
-                             compStatus === Severity.DEGRADED ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'
-                          }`}>
-                             {compStatus}
-                          </div>
-                       </div>
-                       <UptimeGraph componentId={comp.id} createdAt={comp.createdAt} />
-                    </div>
-                  );
-               })}
-             </div>
+        {regionsWithComponents.length === 0 ? (
+          <div className="space-y-4 animate-pulse">
+            {[1, 2].map(i => (
+              <div key={i} className="bg-white rounded-2xl h-48 border border-gray-100"></div>
+            ))}
           </div>
-        ))}
+        ) : (
+          regionsWithComponents.map(region => (
+            <div key={region.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" role="region" aria-labelledby={`region-${region.id}`}>
+               <div className="p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                  <h2 id={`region-${region.id}`} className="text-sm font-black text-gray-900 uppercase tracking-widest">{region.name}</h2>
+                  <div className="flex items-center gap-2">
+                     <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                     <span className="text-[10px] font-bold text-gray-400 uppercase">Operational Status</span>
+                  </div>
+               </div>
+               <div className="divide-y divide-gray-50">
+                 {region.components.map(comp => {
+                    const compStatus = getComponentStatus(comp.id);
+                    const sla = calculateSLA(comp.id);
+                    return (
+                      <div key={comp.id} className="p-6 hover:bg-gray-50/50 transition-colors" aria-label={`Component ${comp.name} status: ${compStatus}`}>
+                         <div className="flex justify-between items-center mb-3">
+                            <div>
+                               <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                                  {comp.name}
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${sla < 99.9 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                                     90D SLA: {sla}%
+                                  </span>
+                               </h4>
+                               <p className="text-[10px] text-gray-400 mt-0.5">{comp.description}</p>
+                            </div>
+                            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                               compStatus === Severity.OPERATIONAL ? 'bg-emerald-50 text-emerald-600' :
+                               compStatus === Severity.DEGRADED ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'
+                            }`}>
+                               {compStatus}
+                            </div>
+                         </div>
+                         <UptimeGraph componentId={comp.id} createdAt={comp.createdAt} />
+                      </div>
+                    );
+                 })}
+               </div>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="mt-20">

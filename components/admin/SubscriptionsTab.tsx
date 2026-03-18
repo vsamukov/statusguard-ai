@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useApp } from '../../store.tsx';
-import { NotificationSettings, Subscription } from '../../types.ts';
+import { useApp } from '../../store';
+import { NotificationSettings, Subscription } from '../../types';
 
 const SubscriptionsTab: React.FC = () => {
   const { state, addSubscriber, removeSubscriber, updateSubscriber, saveNotificationSettings, getSubscribers } = useApp();

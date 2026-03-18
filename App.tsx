@@ -1,9 +1,10 @@
 
 import React from 'react';
-import { AppProvider, useApp } from './store.tsx';
-import AdminPortal from './AdminPortal.tsx';
-import PublicDashboard from './components/PublicDashboard.tsx';
-import LoginPage from './components/LoginPage.tsx';
+import { AppProvider, useApp } from './store';
+import AdminPortal from './components/AdminPortal';
+import PublicDashboard from './components/PublicDashboard';
+import LoginPage from './components/LoginPage';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 // The server injects this flag during transpilation
 const IS_HUB_MODE = (process.env as any).IS_HUB === true;
@@ -53,9 +54,11 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 };
 

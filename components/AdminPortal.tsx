@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { useApp } from './store.tsx';
-import AdminDashboard from './AdminDashboard.tsx';
+import { useApp } from '../store';
+import AdminDashboard from './AdminDashboard';
 
 const AdminPortal: React.FC = () => {
   const { state, switchDashboard, logout } = useApp();
