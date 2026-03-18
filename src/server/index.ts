@@ -60,8 +60,8 @@ const transpilationCache = new Map<string, { code: string, mtime: number }>();
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
   
-  // Skip if it's an API route or health check
-  if (cleanPath.startsWith('/api') || cleanPath.startsWith('/health')) return next();
+  // Skip if it's an API route, health check, or the root path
+  if (cleanPath === '/' || cleanPath.startsWith('/api') || cleanPath.startsWith('/health')) return next();
 
   // Ensure we are looking in the project root
   const projectRoot = process.cwd();
@@ -124,7 +124,6 @@ app.use(async (req, res, next) => {
         format: 'esm',
         target: 'es2020',
         sourcemap: 'inline',
-        jsx: 'react',
         define: { 
           'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
           'process.env.IS_HUB': JSON.stringify(IS_HUB),
