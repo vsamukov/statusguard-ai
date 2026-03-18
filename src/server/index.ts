@@ -59,10 +59,38 @@ const transpilationCache = new Map<string, { code: string, mtime: number }>();
 
 app.use(async (req, res, next) => {
   const cleanPath = req.path.split('?')[0];
-  if (cleanPath.endsWith('.ts') || cleanPath.endsWith('.tsx')) {
-    const filePath = path.join(rootPath, cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
-    if (!fs.existsSync(filePath)) return next();
-    
+  
+  // Skip if it's an API route or already handled
+  if (cleanPath.startsWith('/api') || cleanPath.startsWith('/health')) return next();
+
+  let filePath = path.join(rootPath, cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
+  let loader: esbuild.Loader | null = null;
+
+  // 1. Try exact path
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    if (cleanPath.endsWith('.ts')) loader = 'ts';
+    else if (cleanPath.endsWith('.tsx')) loader = 'tsx';
+  } 
+  
+  // 2. Try adding extensions if no loader found
+  if (!loader) {
+    const extensions: { ext: string, l: esbuild.Loader }[] = [
+      { ext: '.tsx', l: 'tsx' },
+      { ext: '.ts', l: 'ts' },
+      { ext: '/index.tsx', l: 'tsx' },
+      { ext: '/index.ts', l: 'ts' }
+    ];
+    for (const { ext, l } of extensions) {
+      const p = filePath + ext;
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        filePath = p;
+        loader = l;
+        break;
+      }
+    }
+  }
+
+  if (loader) {
     try {
       const stats = fs.statSync(filePath);
       const cached = transpilationCache.get(filePath);
@@ -73,7 +101,7 @@ app.use(async (req, res, next) => {
 
       const content = fs.readFileSync(filePath, 'utf8');
       const result = await esbuild.transform(content, {
-        loader: cleanPath.endsWith('.tsx') ? 'tsx' : 'ts',
+        loader,
         format: 'esm',
         target: 'es2020',
         sourcemap: 'inline',
@@ -87,7 +115,7 @@ app.use(async (req, res, next) => {
       res.type('application/javascript').send(result.code);
     } catch (err) {
       console.error('Transpilation failed:', err);
-      res.status(500).send(`console.error("Transpilation failed");`);
+      res.status(500).send(`console.error("Transpilation failed for ${cleanPath}");`);
     }
   } else next();
 });
