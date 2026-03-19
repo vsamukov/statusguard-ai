@@ -12,6 +12,8 @@ const router = Router();
 router.post('/auth', validate(loginSchema), async (req, res) => {
   const { username, password } = req.body;
   
+  console.log(`[HUB] Login attempt for user: ${username}`);
+
   const isUserMatch = username === ADMIN_USER;
   let isPassMatch = false;
 
@@ -19,14 +21,19 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
     // Check if adminPass is a bcrypt hash
     if (ADMIN_PASS.startsWith('$2')) {
       isPassMatch = await bcrypt.compare(password, ADMIN_PASS);
+      console.log(`[HUB] Password comparison (bcrypt): ${isPassMatch}`);
     } else {
       // Fallback for plaintext (not recommended for production)
       isPassMatch = password === ADMIN_PASS;
+      console.log(`[HUB] Password comparison (plaintext): ${isPassMatch}`);
     }
+  } else {
+    console.warn(`[HUB] User mismatch: expected ${ADMIN_USER}, got ${username}`);
   }
 
   if (isUserMatch && isPassMatch) {
     const token = jwt.sign({ username, role: 'hub-admin' }, JWT_SECRET, { expiresIn: '24h' });
+    console.log(`[HUB] Login successful, token generated`);
     
     res.cookie('session_id', token, { 
       httpOnly: true, 
@@ -37,6 +44,7 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
     
     res.json({ token, username });
   } else {
+    console.error(`[HUB] Login failed: Invalid Credentials`);
     res.status(401).json({ error: 'Invalid Credentials' });
   }
 });

@@ -8,24 +8,30 @@ export interface AuthRequest extends Request {
 }
 
 export const hubAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.cookies.session_id || req.headers.authorization?.split(' ')[1];
+  const token = req.cookies?.session_id || req.headers.authorization?.split(' ')[1];
   const secret = req.headers['x-admin-secret'];
   
+  console.log(`[AUTH] hubAuth attempt: path=${req.path}, token=${token ? 'present' : 'missing'}, secret=${secret ? 'present' : 'missing'}`);
+
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
       req.user = decoded;
+      console.log(`[AUTH] hubAuth: JWT valid for user ${decoded.username}, role ${decoded.role}`);
       return next();
-    } catch (err) {
+    } catch (err: any) {
+      console.warn(`[AUTH] hubAuth: JWT invalid: ${err.message}`);
       // Fall back to secret check
     }
   }
 
   if (secret && (secret === ADMIN_SECRET || (Array.isArray(secret) && secret.includes(ADMIN_SECRET)))) {
     req.user = { role: 'admin', username: 'remote-admin' };
+    console.log(`[AUTH] hubAuth: Secret valid`);
     return next();
   }
 
+  console.error(`[AUTH] hubAuth: Unauthorized access attempt to ${req.path}`);
   return res.status(401).json({ error: 'Unauthorized: Invalid credentials' });
 };
 
