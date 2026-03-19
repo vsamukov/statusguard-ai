@@ -35,7 +35,6 @@ export const migrateDb = async (isHub: boolean) => {
       CREATE TABLE IF NOT EXISTS regions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
-        deleted_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -44,13 +43,28 @@ export const migrateDb = async (isHub: boolean) => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS components (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        region_id UUID REFERENCES regions(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         description TEXT,
-        deleted_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migration: Add deleted_at column if missing
+    const tablesToUpdate = ['regions', 'components', 'incidents'];
+    for (const table of tablesToUpdate) {
+      const colCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = $1 
+        AND column_name = 'deleted_at'
+      `, [table]);
+      
+      if (colCheck.rows.length === 0) {
+        console.log(`[DB] Migrating: Adding 'deleted_at' column to ${table}...`);
+        await client.query(`ALTER TABLE ${table} ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE`);
+      }
+    }
 
     // Ensure incidents table exists
     await client.query(`

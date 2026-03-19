@@ -35,10 +35,10 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
 
     const token = jwt.sign({ username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     
-    res.cookie('session_id', token, { 
+    res.cookie('vox_hub_session', token, { 
       httpOnly: true, 
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000 
     });
     
