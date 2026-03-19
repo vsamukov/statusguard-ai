@@ -60,11 +60,19 @@ const PublicDashboard: React.FC = () => {
   }, [state.regions, state.components]);
 
   const globalStatus = React.useMemo(() => {
-    if (state.components.length === 0) return { label: 'System Initializing', color: 'bg-indigo-500', sub: 'Monitoring is starting up...' };
+    const activeIncidents = state.incidents.filter(i => !i.endTime);
     
-    const statuses = state.components.map(c => getComponentStatus(c.id));
-    if (statuses.includes(Severity.OUTAGE)) return { label: 'System Outage', color: 'bg-red-600', sub: 'Major disruptions are occurring' };
-    if (statuses.includes(Severity.DEGRADED)) return { label: 'Partial Degradation', color: 'bg-yellow-500', sub: 'Some services are experiencing issues' };
+    if (activeIncidents.length === 0) {
+      if (state.components.length === 0) return { label: 'System Initializing', color: 'bg-indigo-500', sub: 'Monitoring is starting up...' };
+      return { label: 'All Systems Operational', color: 'bg-emerald-500', sub: 'Services are running optimally' };
+    }
+
+    const hasOutage = activeIncidents.some(i => i.severity === Severity.OUTAGE);
+    const hasDegradation = activeIncidents.some(i => i.severity === Severity.DEGRADED);
+
+    if (hasOutage) return { label: 'System Outage', color: 'bg-red-600', sub: 'Major disruptions are occurring' };
+    if (hasDegradation) return { label: 'Partial Degradation', color: 'bg-yellow-500', sub: 'Some services are experiencing issues' };
+    
     return { label: 'All Systems Operational', color: 'bg-emerald-500', sub: 'Services are running optimally' };
   }, [state.components, state.incidents]);
 
