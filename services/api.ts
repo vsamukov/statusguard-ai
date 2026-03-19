@@ -159,7 +159,9 @@ export const portalApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
     });
-    return handleResponse(res, url);
+    const data = await handleResponse(res, url);
+    console.log(`[API] Login response data:`, data);
+    return data;
   },
   async getDashboardConfigs() {
     const url = `/api/portal/configs`;

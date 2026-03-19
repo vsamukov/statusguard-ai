@@ -152,7 +152,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const login = async (cred: any) => {
-    const { token, username } = await portalApi.login(cred);
+    const response = await portalApi.login(cred);
+    console.log('[STORE] Login response:', response);
+    const { token, username } = response;
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, username);
     setState(prev => ({ ...prev, isAuthenticated: true, currentUser: username }));

@@ -11,7 +11,7 @@ export const hubAuth = (req: AuthRequest, res: Response, next: NextFunction) => 
   const token = req.cookies?.session_id || req.headers.authorization?.split(' ')[1];
   const secret = req.headers['x-admin-secret'];
   
-  console.log(`[AUTH] hubAuth attempt: path=${req.path}, token=${token ? 'present' : 'missing'}, secret=${secret ? 'present' : 'missing'}`);
+  console.log(`[AUTH] hubAuth attempt: path=${req.path}, token_raw="${token}", secret=${secret ? 'present' : 'missing'}`);
 
   if (token) {
     try {
@@ -20,7 +20,7 @@ export const hubAuth = (req: AuthRequest, res: Response, next: NextFunction) => 
       console.log(`[AUTH] hubAuth: JWT valid for user ${decoded.username}, role ${decoded.role}`);
       return next();
     } catch (err: any) {
-      console.warn(`[AUTH] hubAuth: JWT invalid: ${err.message}`);
+      console.warn(`[AUTH] hubAuth: JWT invalid (token="${token}"): ${err.message}`);
       // Fall back to secret check
     }
   }
