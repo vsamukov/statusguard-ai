@@ -104,6 +104,15 @@ export const migrateDb = async (isHub: boolean) => {
       )
     `);
 
+    // Ensure subscription_regions join table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS subscription_regions (
+        subscription_id UUID REFERENCES subscriptions(id) ON DELETE CASCADE,
+        region_id UUID REFERENCES regions(id) ON DELETE CASCADE,
+        PRIMARY KEY (subscription_id, region_id)
+      )
+    `);
+
     // Ensure audit_logs table exists
     await client.query(`
       CREATE TABLE IF NOT EXISTS audit_logs (

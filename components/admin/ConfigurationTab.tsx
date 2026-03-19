@@ -24,8 +24,8 @@ const ConfigurationTab: React.FC = () => {
     } catch (err) { alert("Action failed."); }
   };
 
-  const sortedRegions = [...state.regions].sort((a, b) => a.name.localeCompare(b.name));
-  const sortedComponents = [...state.components].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedRegions = [...(state.regions || [])].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedComponents = [...(state.components || [])].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-8">
@@ -43,7 +43,7 @@ const ConfigurationTab: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-8">
-        {sortedRegions.map(region => (
+        {(sortedRegions || []).map(region => (
           <div key={region.id} className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
             <div className="px-8 py-5 bg-gray-50/50 border-b border-gray-100 flex justify-between items-center">
               <div className="flex items-center gap-3">
@@ -69,7 +69,7 @@ const ConfigurationTab: React.FC = () => {
             </div>
             
             <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {sortedComponents.filter(c => c.regionId === region.id).map(comp => (
+              {(sortedComponents || []).filter(c => c.regionId === region.id).map(comp => (
                 <div key={comp.id} className="border border-gray-100 rounded-2xl p-6 bg-gray-50/30 flex flex-col group relative">
                   <div className="flex justify-between items-start mb-2">
                     <span className="font-bold text-sm text-gray-800">{comp.name}</span>
@@ -92,7 +92,7 @@ const ConfigurationTab: React.FC = () => {
                 </div>
               ))}
               
-              {state.components.filter(c => c.regionId === region.id).length === 0 && (
+              {(state.components || []).filter(c => c.regionId === region.id).length === 0 && (
                 <div className="col-span-full py-12 text-center border-2 border-dashed border-gray-100 rounded-2xl">
                   <p className="text-xs text-gray-300 font-bold uppercase tracking-widest">No components defined</p>
                 </div>

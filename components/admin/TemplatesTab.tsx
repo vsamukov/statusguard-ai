@@ -16,7 +16,7 @@ const TemplatesTab: React.FC = () => {
     setEditing(null);
   };
 
-  const componentNames = Array.from(new Set(state.components.map(c => c.name))).sort();
+  const componentNames = Array.from(new Set((state.components || []).map(c => c.name))).sort();
 
   return (
     <div className="space-y-6">
@@ -31,7 +31,7 @@ const TemplatesTab: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {state.templates.map(t => (
+        {(state.templates || []).map(t => (
           <div key={t.id} className="bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start mb-2">
               <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{t.componentName}</span>
@@ -58,7 +58,7 @@ const TemplatesTab: React.FC = () => {
                 onChange={e => setEditing({ ...editing, componentName: e.target.value })}
               >
                 <option value="">Target Component Name...</option>
-                {componentNames.map(name => <option key={name} value={name}>{name}</option>)}
+                {(componentNames || []).map(name => <option key={name} value={name}>{name}</option>)}
               </select>
               <input 
                 required

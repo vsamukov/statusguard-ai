@@ -129,7 +129,7 @@ const SubscriptionsTab: React.FC = () => {
           <div className="flex-1">
             <table className="w-full text-left text-sm">
               <tbody className="divide-y divide-gray-50">
-                {subscribers.map(sub => (
+                {(subscribers || []).map(sub => (
                   <tr key={sub.id} className="group hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-1">
                       {editingSub?.id === sub.id ? (

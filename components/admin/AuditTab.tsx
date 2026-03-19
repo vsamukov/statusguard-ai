@@ -47,7 +47,7 @@ const AuditTab: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {state.auditLogs.map(log => (
+            {(state.auditLogs || []).map(log => (
               <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
                 <td className="px-6 py-4 font-mono text-gray-400 whitespace-nowrap">
                   {new Date(log.createdAt).toLocaleString(undefined, {
@@ -70,7 +70,7 @@ const AuditTab: React.FC = () => {
                 </td>
               </tr>
             ))}
-            {state.auditLogs.length === 0 && (
+            {(state.auditLogs || []).length === 0 && (
               <tr>
                 <td colSpan={4} className="px-6 py-12 text-center text-gray-400 italic">No activity recorded yet.</td>
               </tr>

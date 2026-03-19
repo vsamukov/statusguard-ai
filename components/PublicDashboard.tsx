@@ -53,14 +53,69 @@ const PublicDashboard: React.FC = () => {
     );
   };
 
+  const RegionSubscribe: React.FC<{ regionId: string; regionName: string }> = ({ regionId, regionName }) => {
+    const [email, setEmail] = useState('');
+    const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!email) return;
+      setStatus('loading');
+      setError('');
+      try {
+        await subscribe(email, regionId);
+        setStatus('success');
+        setEmail('');
+      } catch (err: any) {
+        setStatus('error');
+        setError(err.message || 'Failed to subscribe');
+      }
+    };
+
+    if (status === 'success') {
+      return (
+        <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-3 py-1 rounded-full">
+          Subscribed to {regionName} updates!
+        </div>
+      );
+    }
+
+    return (
+      <form onSubmit={handleSubmit} className="flex items-center gap-2">
+        <input 
+          type="email" 
+          required
+          placeholder="Email for updates" 
+          className="px-2 py-1 text-[10px] border border-gray-200 rounded outline-none focus:border-indigo-300 transition-colors w-40"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+        />
+        <button 
+          disabled={status === 'loading'}
+          className="bg-indigo-600 text-white px-3 py-1 text-[10px] font-bold rounded hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
+        >
+          {status === 'loading' ? '...' : 'Subscribe'}
+        </button>
+        {status === 'error' && <span className="text-[9px] text-red-500 font-bold">{error}</span>}
+      </form>
+    );
+  };
+
   const getComponentStatus = (componentId: string) => {
-    const activeIncidents = state.incidents.filter(i => (i.componentIds || []).includes(componentId) && !i.endTime);
-    if (activeIncidents.find(i => i.severity === Severity.OUTAGE)) return Severity.OUTAGE;
-    if (activeIncidents.find(i => i.severity === Severity.DEGRADED)) return Severity.DEGRADED;
+    if (!state.incidents) return Severity.OPERATIONAL;
+    const activeIncidents = state.incidents.filter(i => 
+      !i.endTime && 
+      (i.componentIds || []).some(cid => String(cid) === String(componentId))
+    );
+    
+    if (activeIncidents.some(i => String(i.severity).toUpperCase() === Severity.OUTAGE)) return Severity.OUTAGE;
+    if (activeIncidents.some(i => String(i.severity).toUpperCase() === Severity.DEGRADED)) return Severity.DEGRADED;
     return Severity.OPERATIONAL;
   };
 
   const getRegionStatus = (regionComponents: any[]) => {
+    if (!regionComponents || regionComponents.length === 0) return Severity.OPERATIONAL;
     const statuses = regionComponents.map(c => getComponentStatus(c.id));
     if (statuses.includes(Severity.OUTAGE)) return Severity.OUTAGE;
     if (statuses.includes(Severity.DEGRADED)) return Severity.DEGRADED;
@@ -68,21 +123,21 @@ const PublicDashboard: React.FC = () => {
   };
 
   const regionsWithComponents = React.useMemo(() => {
-    return [...state.regions]
+    return [...(state.regions || [])]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(region => ({
         ...region,
-        components: [...state.components]
+        components: [...(state.components || [])]
           .filter(c => c.regionId === region.id)
           .sort((a, b) => a.name.localeCompare(b.name))
       })).filter(r => r.components.length > 0);
   }, [state.regions, state.components]);
 
   const globalStatus = React.useMemo(() => {
-    const activeIncidents = state.incidents.filter(i => !i.endTime);
+    const activeIncidents = (state.incidents || []).filter(i => !i.endTime);
     
     if (activeIncidents.length === 0) {
-      if (state.components.length === 0) return { label: 'System Initializing', color: 'bg-indigo-500', sub: 'Monitoring is starting up...' };
+      if ((state.components || []).length === 0) return { label: 'System Initializing', color: 'bg-indigo-500', sub: 'Monitoring is starting up...' };
       return { label: 'All Systems Operational', color: 'bg-emerald-500', sub: 'Services are running optimally' };
     }
 
@@ -98,7 +153,7 @@ const PublicDashboard: React.FC = () => {
   const pastIncidentsByDate = React.useMemo(() => {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const filtered = state.incidents
+    const filtered = (state.incidents || [])
       .filter(i => new Date(i.startTime) >= ninetyDaysAgo)
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
     const groups: { [date: string]: Incident[] } = {};
@@ -118,38 +173,17 @@ const PublicDashboard: React.FC = () => {
             <h1 className="text-3xl font-bold mb-2">{globalStatus.label}</h1>
             <p className="opacity-90">{globalStatus.sub}</p>
           </div>
-          <div className="bg-white/10 p-4 rounded-xl backdrop-blur-md border border-white/20 w-full md:w-auto">
-            <h3 className="text-sm font-bold mb-2 uppercase tracking-tighter text-white">Get Updates</h3>
-            <form onSubmit={(e) => handleSubscribe(e)} className="flex flex-col gap-2">
-              <div className="flex bg-white rounded-lg overflow-hidden border border-white/30">
-                <input 
-                  type="email" 
-                  required
-                  placeholder="email@example.com" 
-                  className="px-3 py-2 text-gray-900 text-xs outline-none w-full"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                />
-                <button 
-                  disabled={subStatus === 'loading'}
-                  className="bg-indigo-600 px-4 py-2 text-xs font-bold hover:bg-indigo-700 transition-colors disabled:bg-indigo-400 text-white"
-                >
-                  {subStatus === 'loading' ? '...' : 'Subscribe'}
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       </div>
 
-      {state.incidents.filter(i => !i.endTime).length > 0 && (
+      {(state.incidents || []).filter(i => !i.endTime).length > 0 && (
         <div className="mb-12">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
             Active Incidents
           </h2>
           <div className="space-y-4">
-            {state.incidents.filter(i => !i.endTime).map(incident => (
+            {(state.incidents || []).filter(i => !i.endTime).map(incident => (
               <div key={incident.id} className="bg-white border-l-4 border-red-500 rounded-lg p-6 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-lg">{incident.title}</h3>
@@ -206,6 +240,10 @@ const PublicDashboard: React.FC = () => {
                  </button>
                  {isExpanded && (
                    <div className="divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                     <div className="p-4 bg-gray-50/30 flex justify-between items-center border-b border-gray-50">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Subscribe to {region.name} updates</span>
+                        <RegionSubscribe regionId={region.id} regionName={region.name} />
+                     </div>
                      {region.components.map(comp => {
                         const compStatus = getComponentStatus(comp.id);
                         const sla = calculateSLA(comp.id);
@@ -249,9 +287,9 @@ const PublicDashboard: React.FC = () => {
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">{date}</h3>
                 <div className="space-y-4">
                   {incidents.map(incident => {
-                    const affectedComponents = state.components.filter(c => (incident.componentIds || []).includes(c.id));
+                    const affectedComponents = (state.components || []).filter(c => (incident.componentIds || []).includes(c.id));
                     const uniqueRegions = Array.from(new Set(affectedComponents.map(c => c.regionId)))
-                      .map(rid => state.regions.find(r => r.id === rid))
+                      .map(rid => (state.regions || []).find(r => r.id === rid))
                       .filter(Boolean);
 
                     return (

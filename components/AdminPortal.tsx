@@ -6,7 +6,7 @@ import AdminDashboard from './AdminDashboard';
 const AdminPortal: React.FC = () => {
   const { state, switchDashboard, logout } = useApp();
 
-  const activeDashboard = state.dashboards.find(d => d.id === state.activeDashboardId);
+  const activeDashboard = (state.dashboards || []).find(d => d.id === state.activeDashboardId);
 
   const handleViewPublic = () => {
     if (activeDashboard?.url) {
@@ -31,7 +31,7 @@ const AdminPortal: React.FC = () => {
         </div>
 
         <nav className="flex-1 px-4 py-8 space-y-2 overflow-y-auto">
-          {state.dashboards.map(dash => (
+          {(state.dashboards || []).map(dash => (
             <button
               key={dash.id}
               onClick={() => switchDashboard(dash.id)}

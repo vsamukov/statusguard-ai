@@ -72,22 +72,31 @@ export const incidentService = {
 
   async notify(incidentId: string, type: 'NEW' | 'RESOLVED') {
     try {
-      const subscribersRes = await pool.query('SELECT email FROM subscriptions');
-      const recipients = subscribersRes.rows.map(r => r.email);
-      if (recipients.length === 0) return;
-
       const incidentRes = await pool.query('SELECT * FROM incidents WHERE id = $1', [incidentId]);
       if (incidentRes.rows.length === 0) return;
       const incident = incidentRes.rows[0];
 
       const compsRes = await pool.query(`
-        SELECT c.name as comp_name, r.name as reg_name
+        SELECT c.name as comp_name, r.name as reg_name, r.id as reg_id
         FROM incident_affected_components iac
         JOIN components c ON iac.component_id = c.id
         JOIN regions r ON c.region_id = r.id
         WHERE iac.incident_id = $1
       `, [incidentId]);
       
+      const affectedRegionIds = Array.from(new Set(compsRes.rows.map(r => r.reg_id)));
+      if (affectedRegionIds.length === 0) return;
+
+      const subscribersRes = await pool.query(`
+        SELECT DISTINCT s.email 
+        FROM subscriptions s
+        JOIN subscription_regions sr ON s.id = sr.subscription_id
+        WHERE sr.region_id = ANY($1)
+      `, [affectedRegionIds]);
+
+      const recipients = subscribersRes.rows.map(r => r.email);
+      if (recipients.length === 0) return;
+
       const affectedInfo = compsRes.rows.map(r => `${r.comp_name} (${r.reg_name})`).join(', ');
 
       const templateKey = type === 'NEW' ? 'incident_new_template' : 'incident_resolved_template';

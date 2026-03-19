@@ -17,7 +17,7 @@ export interface Region { id: string; name: string; }
 export interface Component { id: string; regionId: string; name: string; description: string; sla90?: number; createdAt?: string; }
 export interface Template { id: string; componentName: string; name: string; title: string; description: string; }
 export interface Incident { id: string; componentIds: string[]; title: string; description: string; severity: Severity; startTime: string; endTime: string | null; }
-export interface Subscription { id: string; email: string; createdAt: string; }
+export interface Subscription { id: string; email: string; createdAt: string; regions?: Region[]; }
 export interface NotificationSettings { incidentNewTemplate: string; incidentResolvedTemplate: string; }
 export interface AdminUser { id: string; username: string; createdAt: string; }
 export interface AuditLog { id: string; username: string; actionType: string; targetType: string; targetName: string; details: any; createdAt: string; }

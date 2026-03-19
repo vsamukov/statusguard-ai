@@ -133,14 +133,14 @@ const ReportingTab: React.FC = () => {
             <div className="space-y-4">
               <select required className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.regionId} onChange={e => setForm({...form, regionId: e.target.value, componentIds: []})}>
                 <option value="">Select Region...</option>
-                {state.regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                {(state.regions || []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
               
               {form.regionId && (
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Affected Components</label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {filteredComponents.map(c => (
+                    {(filteredComponents || []).map(c => (
                       <button
                         key={c.id}
                         type="button"
@@ -162,7 +162,7 @@ const ReportingTab: React.FC = () => {
             {availableTemplates.length > 0 && (
               <select className="w-full text-xs border rounded-lg px-3 py-2 bg-indigo-50 border-indigo-100 outline-none" onChange={e => applyTemplate(e.target.value)} defaultValue="">
                 <option value="">Templates for {state.components.find(c => c.id === form.componentIds[0])?.name}...</option>
-                {availableTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {(availableTemplates || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
 
@@ -195,7 +195,7 @@ const ReportingTab: React.FC = () => {
 
         <div className="space-y-2">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Recent Past</h3>
-          {pastIncidents.map(inc => (
+          {(pastIncidents || []).map(inc => (
             <div key={inc.id} className={`bg-white p-4 rounded-xl border flex items-center justify-between transition-all ${editingIncident?.id === inc.id ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-100'}`}>
               <div className="flex flex-col">
                  <span className="text-sm font-bold text-gray-800">{inc.title}</span>
@@ -230,7 +230,7 @@ const ReportingTab: React.FC = () => {
         </div>
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Active Now</h3>
-          {activeIncidents.map(inc => (
+          {(activeIncidents || []).map(inc => (
             <div key={inc.id} className={`p-5 bg-white border rounded-2xl transition-all ${editingIncident?.id === inc.id ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-red-100 shadow-sm'}`}>
               <div className="flex justify-between items-start mb-3">
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${inc.severity === Severity.OUTAGE ? 'bg-red-50 text-red-600' : 'bg-yellow-50 text-yellow-600'}`}>{inc.severity}</span>

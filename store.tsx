@@ -22,7 +22,7 @@ interface AppContextType {
   reportIncident: (incident: any) => Promise<void>;
   updateIncident: (id: string, incident: any) => Promise<void>;
   resolveIncident: (incidentId: string) => Promise<void>;
-  addSubscriber: (email: string) => Promise<void>;
+  addSubscriber: (email: string, regionId: string) => Promise<void>;
   updateSubscriber: (id: string, email: string) => Promise<void>;
   removeSubscriber: (id: string) => Promise<void>;
   saveNotificationSettings: (settings: NotificationSettings) => Promise<void>;
@@ -169,7 +169,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const totalMinutes = days * 24 * 60;
     
     // Filter incidents that overlap with the period and affect this component
-    const componentIncidents = state.incidents.filter(i => 
+    const componentIncidents = (state.incidents || []).filter(i => 
       (i.componentIds || []).includes(componentId) && 
       new Date(i.startTime).getTime() < now &&
       (!i.endTime || new Date(i.endTime).getTime() > periodStart)
@@ -215,7 +215,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reportIncident: (inc) => wrapAction(() => (remoteApi as any).createIncident(inc)),
       updateIncident: (id, inc) => wrapAction(() => (remoteApi as any).updateIncident(id, inc)),
       resolveIncident: (id) => wrapAction(() => (remoteApi as any).resolveIncident(id)),
-      addSubscriber: (e) => wrapAction(() => remoteApi!.createSubscriber(e)),
+      addSubscriber: (e, rid) => wrapAction(() => remoteApi!.createSubscriber(e, rid)),
       updateSubscriber: (id, e) => wrapAction(() => (remoteApi as any).createSubscriber(e)),
       removeSubscriber: (idOrEmail) => wrapAction(() => remoteApi!.deleteSubscriber(idOrEmail)),
       saveNotificationSettings: (s) => wrapAction(() => (remoteApi as any).updateNotificationSettings(s)),

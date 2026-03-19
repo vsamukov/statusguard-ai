@@ -21,7 +21,7 @@ const UptimeGraph: React.FC<UptimeGraphProps> = ({ componentId, createdAt, days 
   const [hoveredDay, setHoveredDay] = useState<{index: number, status: DailyStatus} | null>(null);
 
   const componentIncidents = React.useMemo(() => {
-    return state.incidents.filter(i => (i.componentIds || []).includes(componentId));
+    return (state.incidents || []).filter(i => (i.componentIds || []).includes(componentId));
   }, [state.incidents, componentId]);
 
   const history = React.useMemo(() => {

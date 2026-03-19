@@ -23,12 +23,12 @@ export const nodeApi = {
     const res = await fetch(url);
     return handleResponse(res, url);
   },
-  async createSubscriber(email: string) {
+  async createSubscriber(email: string, regionId: string) {
     const url = `/api/subscriptions`;
     const res = await fetch(url, { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }) 
+      body: JSON.stringify({ email, regionId }) 
     });
     return handleResponse(res, url);
   },
@@ -96,9 +96,9 @@ export const createRemoteApi = (config: RemoteDashboardConfig) => {
       const res = await safeFetch(url, { method: 'DELETE', headers });
       return handleResponse(res, url);
     },
-    async createSubscriber(email: string) {
+    async createSubscriber(email: string, regionId: string) {
       const url = `${base}/api/subscriptions`;
-      const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify({ email }) });
+      const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify({ email, regionId }) });
       return handleResponse(res, url);
     },
     async deleteSubscriber(id: string) {

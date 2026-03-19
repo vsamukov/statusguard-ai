@@ -36,6 +36,7 @@ export const componentSchema = z.object({
 export const subscriptionSchema = z.object({
   body: z.object({
     email: z.string().email(),
+    regionId: z.string().uuid(),
   }),
 });
 

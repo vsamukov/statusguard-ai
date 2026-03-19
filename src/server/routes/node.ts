@@ -89,9 +89,20 @@ router.get('/admin/subscribers', nodeAuth, async (req: AuthRequest, res) => {
   const search = req.query.search ? `%${req.query.search}%` : '%';
   try {
     const countRes = await pool.query('SELECT count(*) FROM subscriptions WHERE email LIKE $1', [search]);
-    const itemsRes = await pool.query('SELECT id, email, created_at as "createdAt" FROM subscriptions WHERE email LIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3', [search, limit, offset]);
+    const itemsRes = await pool.query(`
+      SELECT s.id, s.email, s.created_at as "createdAt", 
+             COALESCE(json_agg(json_build_object('id', r.id, 'name', r.name)) FILTER (WHERE r.id IS NOT NULL), '[]') as regions
+      FROM subscriptions s
+      LEFT JOIN subscription_regions sr ON s.id = sr.subscription_id
+      LEFT JOIN regions r ON sr.region_id = r.id
+      WHERE s.email LIKE $1
+      GROUP BY s.id
+      ORDER BY s.created_at DESC
+      LIMIT $2 OFFSET $3
+    `, [search, limit, offset]);
     res.json({ total: parseInt(countRes.rows[0].count), items: itemsRes.rows });
   } catch (err: any) {
+    console.error('[API ERROR] /admin/subscribers:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -163,9 +174,18 @@ router.delete('/admin/components/:id', nodeAuth, async (req: AuthRequest, res) =
 
 router.post('/subscriptions', validate(subscriptionSchema), async (req, res) => {
   try {
-    const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [req.body.email]);
+    const { email, regionId } = req.body;
+    const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [email]);
+    const subscriptionId = result.rows[0].id;
+    
+    // Link to region
+    await pool.query('INSERT INTO subscription_regions (subscription_id, region_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [subscriptionId, regionId]);
+    
     res.json(result.rows[0]);
-  } catch (err: any) { res.status(500).json({ error: 'Internal Server Error' }); }
+  } catch (err: any) { 
+    console.error('[API ERROR] /subscriptions:', err.message);
+    res.status(500).json({ error: 'Internal Server Error' }); 
+  }
 });
 
 // Secure public unsubscribe via token
