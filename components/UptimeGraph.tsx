@@ -88,7 +88,7 @@ const UptimeGraph: React.FC<UptimeGraphProps> = ({ componentId, createdAt, days 
           className="absolute z-50 bottom-full mb-2 bg-gray-900 text-white text-[10px] px-2 py-1.5 rounded-md shadow-xl whitespace-nowrap pointer-events-none animate-in fade-in zoom-in-95 duration-100 flex flex-col items-center"
           style={{ 
             left: `${(hoveredDay.index / (days - 1)) * 100}%`,
-            transform: 'translateX(-50%)'
+            transform: hoveredDay.index < 5 ? 'translateX(0%)' : hoveredDay.index > days - 5 ? 'translateX(-100%)' : 'translateX(-50%)'
           }}
         >
           <span className="font-bold opacity-70 mb-0.5">{formatDate(days - 1 - hoveredDay.index)}</span>
@@ -96,7 +96,13 @@ const UptimeGraph: React.FC<UptimeGraphProps> = ({ componentId, createdAt, days 
             <span className={`w-1.5 h-1.5 rounded-full ${getDayColor(hoveredDay.status)} shadow-[0_0_4px_rgba(0,0,0,0.5)]`}></span>
             <span className="capitalize font-medium">{getStatusLabel(hoveredDay.status)}</span>
           </div>
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+          <div 
+            className="absolute top-full border-4 border-transparent border-t-gray-900"
+            style={{ 
+              left: hoveredDay.index < 5 ? '10%' : hoveredDay.index > days - 5 ? '90%' : '50%',
+              transform: 'translateX(-50%)'
+            }}
+          ></div>
         </div>
       )}
 

@@ -157,8 +157,8 @@ const PublicDashboard: React.FC = () => {
           </div>
         ) : (
           regionsWithComponents.map(region => (
-            <div key={region.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" role="region" aria-labelledby={`region-${region.id}`}>
-               <div className="p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+            <div key={region.id} className="bg-white rounded-2xl shadow-sm border border-gray-100" role="region" aria-labelledby={`region-${region.id}`}>
+               <div className="p-6 bg-gray-50 border-b border-gray-100 rounded-t-2xl flex justify-between items-center">
                   <h2 id={`region-${region.id}`} className="text-sm font-black text-gray-900 uppercase tracking-widest">{region.name}</h2>
                   <div className="flex items-center gap-2">
                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
