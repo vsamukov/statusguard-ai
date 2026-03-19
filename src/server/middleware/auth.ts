@@ -8,20 +8,24 @@ export interface AuthRequest extends Request {
 }
 
 export const hubAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.cookies?.session_id || req.headers.authorization?.split(' ')[1];
+  // Prefer Authorization header, then fallback to our specific cookie
+  const authHeader = req.headers.authorization?.split(' ')[1];
+  const cookieToken = req.cookies?.vox_hub_session;
+  const token = authHeader || cookieToken;
+  
   const secret = req.headers['x-admin-secret'];
   
-  console.log(`[AUTH] hubAuth attempt: path=${req.path}, token_raw="${token}", secret=${secret ? 'present' : 'missing'}`);
+  console.log(`[AUTH] hubAuth attempt: path=${req.path}, source=${authHeader ? 'header' : (cookieToken ? 'cookie' : 'none')}, token_raw="${token?.substring(0, 10)}...", secret=${secret ? 'present' : 'missing'}`);
 
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
       req.user = decoded;
-      console.log(`[AUTH] hubAuth: JWT valid for user ${decoded.username}, role ${decoded.role}`);
+      console.log(`[AUTH] hubAuth: JWT valid for user ${decoded.username}`);
       return next();
     } catch (err: any) {
-      console.warn(`[AUTH] hubAuth: JWT invalid (token="${token}"): ${err.message}`);
-      // Fall back to secret check
+      console.warn(`[AUTH] hubAuth: JWT invalid from ${authHeader ? 'header' : 'cookie'}: ${err.message}`);
+      // If the token was malformed, don't just fail if there's a secret
     }
   }
 
@@ -36,7 +40,9 @@ export const hubAuth = (req: AuthRequest, res: Response, next: NextFunction) => 
 };
 
 export const nodeAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.cookies.session_id || req.headers.authorization?.split(' ')[1];
+  const authHeader = req.headers.authorization?.split(' ')[1];
+  const cookieToken = req.cookies?.vox_hub_session;
+  const token = authHeader || cookieToken;
   const secret = req.headers['x-admin-secret'];
   
   if (token) {

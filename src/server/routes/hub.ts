@@ -35,7 +35,7 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
     const token = jwt.sign({ username, role: 'hub-admin' }, JWT_SECRET, { expiresIn: '24h' });
     console.log(`[HUB] Login successful, token generated`);
     
-    res.cookie('session_id', token, { 
+    res.cookie('vox_hub_session', token, { 
       httpOnly: true, 
       secure: true, 
       sameSite: 'none',
