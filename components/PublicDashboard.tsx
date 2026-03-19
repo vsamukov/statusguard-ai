@@ -45,18 +45,30 @@ const PublicDashboard: React.FC = () => {
     }
   };
 
+  const [expandedRegions, setExpandedRegions] = useState<string[]>([]);
+
+  const toggleRegion = (regionId: string) => {
+    setExpandedRegions(prev => 
+      prev.includes(regionId) ? prev.filter(id => id !== regionId) : [...prev, regionId]
+    );
+  };
+
   const getComponentStatus = (componentId: string) => {
-    const activeIncidents = state.incidents.filter(i => i.componentId === componentId && !i.endTime);
+    const activeIncidents = state.incidents.filter(i => i.componentIds.includes(componentId) && !i.endTime);
     if (activeIncidents.find(i => i.severity === Severity.OUTAGE)) return Severity.OUTAGE;
     if (activeIncidents.find(i => i.severity === Severity.DEGRADED)) return Severity.DEGRADED;
     return Severity.OPERATIONAL;
   };
 
   const regionsWithComponents = React.useMemo(() => {
-    return state.regions.map(region => ({
-      ...region,
-      components: state.components.filter(c => c.regionId === region.id)
-    })).filter(r => r.components.length > 0);
+    return [...state.regions]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(region => ({
+        ...region,
+        components: [...state.components]
+          .filter(c => c.regionId === region.id)
+          .sort((a, b) => a.name.localeCompare(b.name))
+      })).filter(r => r.components.length > 0);
   }, [state.regions, state.components]);
 
   const globalStatus = React.useMemo(() => {
@@ -156,45 +168,61 @@ const PublicDashboard: React.FC = () => {
             ))}
           </div>
         ) : (
-          regionsWithComponents.map(region => (
-            <div key={region.id} className="bg-white rounded-2xl shadow-sm border border-gray-100" role="region" aria-labelledby={`region-${region.id}`}>
-               <div className="p-6 bg-gray-50 border-b border-gray-100 rounded-t-2xl flex justify-between items-center">
-                  <h2 id={`region-${region.id}`} className="text-sm font-black text-gray-900 uppercase tracking-widest">{region.name}</h2>
-                  <div className="flex items-center gap-2">
-                     <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                     <span className="text-[10px] font-bold text-gray-400 uppercase">Operational Status</span>
-                  </div>
-               </div>
-               <div className="divide-y divide-gray-50">
-                 {region.components.map(comp => {
-                    const compStatus = getComponentStatus(comp.id);
-                    const sla = calculateSLA(comp.id);
-                    return (
-                      <div key={comp.id} className="p-6 hover:bg-gray-50/50 transition-colors" aria-label={`Component ${comp.name} status: ${compStatus}`}>
-                         <div className="flex justify-between items-center mb-3">
-                            <div>
-                               <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                                  {comp.name}
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${sla < 99.9 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                                     90D SLA: {sla}%
-                                  </span>
-                               </h4>
-                               <p className="text-[10px] text-gray-400 mt-0.5">{comp.description}</p>
-                            </div>
-                            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                               compStatus === Severity.OPERATIONAL ? 'bg-emerald-50 text-emerald-600' :
-                               compStatus === Severity.DEGRADED ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'
-                            }`}>
-                               {compStatus}
-                            </div>
-                         </div>
-                         <UptimeGraph componentId={comp.id} createdAt={comp.createdAt} />
-                      </div>
-                    );
-                 })}
-               </div>
-            </div>
-          ))
+          regionsWithComponents.map(region => {
+            const isExpanded = expandedRegions.includes(region.id);
+            return (
+              <div key={region.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" role="region" aria-labelledby={`region-${region.id}`}>
+                 <button 
+                   onClick={() => toggleRegion(region.id)}
+                   className="w-full p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center hover:bg-gray-100 transition-colors"
+                 >
+                    <div className="flex items-center gap-3">
+                       <h2 id={`region-${region.id}`} className="text-sm font-black text-gray-900 uppercase tracking-widest">{region.name}</h2>
+                       <span className="text-[10px] text-gray-400 font-bold">({region.components.length} components)</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                       <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase">Operational</span>
+                       </div>
+                       <svg className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                       </svg>
+                    </div>
+                 </button>
+                 {isExpanded && (
+                   <div className="divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                     {region.components.map(comp => {
+                        const compStatus = getComponentStatus(comp.id);
+                        const sla = calculateSLA(comp.id);
+                        return (
+                          <div key={comp.id} className="p-6 hover:bg-gray-50/50 transition-colors" aria-label={`Component ${comp.name} status: ${compStatus}`}>
+                             <div className="flex justify-between items-center mb-3">
+                                <div>
+                                   <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                                      {comp.name}
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${sla < 99.9 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                                         90D SLA: {sla}%
+                                      </span>
+                                   </h4>
+                                   <p className="text-[10px] text-gray-400 mt-0.5">{comp.description}</p>
+                                </div>
+                                <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                   compStatus === Severity.OPERATIONAL ? 'bg-emerald-50 text-emerald-600' :
+                                   compStatus === Severity.DEGRADED ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'
+                                }`}>
+                                   {compStatus}
+                                </div>
+                             </div>
+                             <UptimeGraph componentId={comp.id} createdAt={comp.createdAt} />
+                          </div>
+                        );
+                     })}
+                   </div>
+                 )}
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -207,17 +235,30 @@ const PublicDashboard: React.FC = () => {
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">{date}</h3>
                 <div className="space-y-4">
                   {incidents.map(incident => {
-                    const comp = state.components.find(c => c.id === incident.componentId);
-                    const region = state.regions.find(r => r.id === comp?.regionId);
+                    const affectedComponents = state.components.filter(c => incident.componentIds.includes(c.id));
+                    const uniqueRegions = Array.from(new Set(affectedComponents.map(c => c.regionId)))
+                      .map(rid => state.regions.find(r => r.id === rid))
+                      .filter(Boolean);
+
                     return (
                       <div key={incident.id} className="bg-white border border-gray-100 rounded-xl p-6 shadow-sm">
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <h4 className="font-bold text-gray-800">{incident.title}</h4>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] text-indigo-600 font-bold uppercase">Component: {comp?.name || 'Unknown'}</span>
-                              <span className="text-gray-300">•</span>
-                              <span className="text-[10px] text-gray-500 font-bold uppercase">Region: {region?.name || 'Global'}</span>
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              {affectedComponents.map(comp => (
+                                <span key={comp.id} className="text-[9px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 font-bold uppercase rounded">
+                                  {comp.name}
+                                </span>
+                              ))}
+                              {uniqueRegions.length > 0 && (
+                                <>
+                                  <span className="text-gray-300 mx-1">•</span>
+                                  <span className="text-[10px] text-gray-500 font-bold uppercase">
+                                    {uniqueRegions.map(r => r?.name).join(', ')}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${

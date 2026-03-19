@@ -14,6 +14,7 @@ interface AppContextType {
   addRegion: (name: string) => Promise<void>;
   removeRegion: (id: string) => Promise<void>;
   addComponent: (regionId: string, name: string, description: string) => Promise<void>;
+  updateComponent: (id: string, regionId: string, name: string, description: string) => Promise<void>;
   removeComponent: (id: string) => Promise<void>;
   addTemplate: (template: any) => Promise<void>;
   updateTemplate: (id: string, template: any) => Promise<void>;
@@ -169,7 +170,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Filter incidents that overlap with the period and affect this component
     const componentIncidents = state.incidents.filter(i => 
-      i.componentId === componentId && 
+      i.componentIds.includes(componentId) && 
       new Date(i.startTime).getTime() < now &&
       (!i.endTime || new Date(i.endTime).getTime() > periodStart)
     );
@@ -206,6 +207,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addRegion: (n) => wrapAction(() => (remoteApi as any).createRegion(n)),
       removeRegion: (id) => wrapAction(() => (remoteApi as any).deleteRegion(id)),
       addComponent: (rid, n, d) => wrapAction(() => (remoteApi as any).createComponent(rid, n, d)),
+      updateComponent: (id, rid, n, d) => wrapAction(() => (remoteApi as any).updateComponent(id, rid, n, d)),
       removeComponent: (id) => wrapAction(() => (remoteApi as any).deleteComponent(id)),
       addTemplate: (t) => wrapAction(() => (remoteApi as any).createTemplate(t)),
       updateTemplate: (id, t) => wrapAction(() => (remoteApi as any).updateTemplate(id, t)),

@@ -12,7 +12,7 @@ const ReportingTab: React.FC = () => {
 
   const initialForm = {
     regionId: '',
-    componentId: '',
+    componentIds: [] as string[],
     title: '',
     severity: Severity.DEGRADED,
     description: '',
@@ -35,18 +35,19 @@ const ReportingTab: React.FC = () => {
   [state.components, form.regionId]);
 
   const availableTemplates = useMemo(() => {
-    const comp = state.components.find(c => c.id === form.componentId);
+    if (form.componentIds.length === 0) return [];
+    const comp = state.components.find(c => c.id === form.componentIds[0]);
     if (!comp) return [];
     return state.templates.filter(t => t.componentName === comp.name);
-  }, [state.templates, form.componentId, state.components]);
+  }, [state.templates, form.componentIds, state.components]);
 
   const handleEdit = (inc: Incident) => {
-    const comp = state.components.find(c => c.id === inc.componentId);
+    const firstComp = state.components.find(c => inc.componentIds.includes(c.id));
     setEditingIncident(inc);
     setForm({
       ...initialForm,
-      regionId: comp?.regionId || '',
-      componentId: inc.componentId,
+      regionId: firstComp?.regionId || '',
+      componentIds: inc.componentIds,
       title: inc.title,
       severity: inc.severity,
       description: inc.description,
@@ -68,11 +69,11 @@ const ReportingTab: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.componentId) return alert('Select component.');
+    if (form.componentIds.length === 0) return alert('Select at least one component.');
     setIsProcessing(true);
     try {
       const payload = {
-        componentId: form.componentId,
+        componentIds: form.componentIds,
         title: form.title,
         severity: form.severity,
         description: form.description,
@@ -83,7 +84,7 @@ const ReportingTab: React.FC = () => {
       else {
         await reportIncident(payload);
         if (form.saveAsTemplate && form.templateName) {
-          const comp = state.components.find(c => c.id === form.componentId);
+          const comp = state.components.find(c => c.id === form.componentIds[0]);
           if (comp) {
             await addTemplate({
               componentName: comp.name, name: form.templateName, title: form.title, description: form.description
@@ -94,6 +95,15 @@ const ReportingTab: React.FC = () => {
       handleCancelEdit();
     } catch (err: any) { alert(`Failed: ${err.message}`); }
     finally { setIsProcessing(false); }
+  };
+
+  const toggleComponent = (id: string) => {
+    setForm(prev => ({
+      ...prev,
+      componentIds: prev.componentIds.includes(id) 
+        ? prev.componentIds.filter(cid => cid !== id)
+        : [...prev.componentIds, id]
+    }));
   };
 
   const handleAiSuggest = async () => {
@@ -120,20 +130,38 @@ const ReportingTab: React.FC = () => {
           </div>
 
           <form onSubmit={handleSave} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select required className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.regionId} onChange={e => setForm({...form, regionId: e.target.value, componentId: ''})}>
-                <option value="">Region...</option>
+            <div className="space-y-4">
+              <select required className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.regionId} onChange={e => setForm({...form, regionId: e.target.value, componentIds: []})}>
+                <option value="">Select Region...</option>
                 {state.regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
-              <select required disabled={!form.regionId} className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50" value={form.componentId} onChange={e => setForm({...form, componentId: e.target.value})}>
-                <option value="">Component...</option>
-                {filteredComponents.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              
+              {form.regionId && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Affected Components</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {filteredComponents.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => toggleComponent(c.id)}
+                        className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${
+                          form.componentIds.includes(c.id)
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-indigo-200'
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {availableTemplates.length > 0 && (
               <select className="w-full text-xs border rounded-lg px-3 py-2 bg-indigo-50 border-indigo-100 outline-none" onChange={e => applyTemplate(e.target.value)} defaultValue="">
-                <option value="">Templates for {state.components.find(c => c.id === form.componentId)?.name}...</option>
+                <option value="">Templates for {state.components.find(c => c.id === form.componentIds[0])?.name}...</option>
                 {availableTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
@@ -171,7 +199,17 @@ const ReportingTab: React.FC = () => {
             <div key={inc.id} className={`bg-white p-4 rounded-xl border flex items-center justify-between transition-all ${editingIncident?.id === inc.id ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-100'}`}>
               <div className="flex flex-col">
                  <span className="text-sm font-bold text-gray-800">{inc.title}</span>
-                 <span className="text-[10px] text-gray-400">{new Date(inc.startTime).toLocaleDateString()}</span>
+                 <div className="flex flex-wrap gap-1 mt-1">
+                   {inc.componentIds.map(cid => {
+                     const comp = state.components.find(c => c.id === cid);
+                     return comp ? (
+                       <span key={cid} className="text-[8px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded uppercase font-bold">
+                         {comp.name}
+                       </span>
+                     ) : null;
+                   })}
+                 </div>
+                 <span className="text-[10px] text-gray-400 mt-1">{new Date(inc.startTime).toLocaleDateString()}</span>
               </div>
               <button onClick={() => handleEdit(inc)} className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">EDIT</button>
             </div>
@@ -202,6 +240,16 @@ const ReportingTab: React.FC = () => {
                 </div>
               </div>
               <h4 className="text-sm font-bold text-gray-800 leading-snug">{inc.title}</h4>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {inc.componentIds.map(cid => {
+                  const comp = state.components.find(c => c.id === cid);
+                  return comp ? (
+                    <span key={cid} className="text-[8px] px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded uppercase font-black">
+                      {comp.name}
+                    </span>
+                  ) : null;
+                })}
+              </div>
               <p className="text-[10px] text-gray-400 mt-2 font-medium">Started: {new Date(inc.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           ))}

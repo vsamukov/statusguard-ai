@@ -80,6 +80,21 @@ export const migrateDb = async (isHub: boolean) => {
       )
     `);
 
+    // Ensure incident_affected_components join table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS incident_affected_components (
+        incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
+        component_id UUID REFERENCES components(id) ON DELETE CASCADE,
+        PRIMARY KEY (incident_id, component_id)
+      )
+    `);
+
+    // Migration: Backfill join table from existing component_id if any
+    const existingIncidents = await client.query('SELECT id, component_id FROM incidents WHERE component_id IS NOT NULL');
+    for (const inc of existingIncidents.rows) {
+      await client.query('INSERT INTO incident_affected_components (incident_id, component_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [inc.id, inc.component_id]);
+    }
+
     // Ensure subscriptions table exists
     await client.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (

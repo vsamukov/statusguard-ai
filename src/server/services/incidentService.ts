@@ -7,16 +7,21 @@ export const incidentService = {
   async createIncident(username: string, data: any) {
     return await withTransaction(async (client) => {
       const res = await client.query(
-        'INSERT INTO incidents (component_id, title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime"',
-        [data.componentId, data.title, data.description, data.severity, data.startTime, data.endTime]
+        'INSERT INTO incidents (title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, description, severity, start_time as "startTime", end_time as "endTime"',
+        [data.title, data.description, data.severity, data.startTime, data.endTime]
       );
       const incidentId = res.rows[0].id;
-      await auditService.log(username, AuditAction.CREATE_INCIDENT, 'INCIDENT', data.title, JSON.stringify({ severity: data.severity }));
       
-      // Await notification to avoid race conditions
+      if (data.componentIds && Array.isArray(data.componentIds)) {
+        for (const compId of data.componentIds) {
+          await client.query('INSERT INTO incident_affected_components (incident_id, component_id) VALUES ($1, $2)', [incidentId, compId]);
+        }
+      }
+
+      await auditService.log(username, AuditAction.CREATE_INCIDENT, 'INCIDENT', data.title, JSON.stringify({ severity: data.severity }));
       await this.notify(incidentId, 'NEW');
       
-      return res.rows[0];
+      return { ...res.rows[0], componentIds: data.componentIds || [] };
     });
   },
 
@@ -33,12 +38,18 @@ export const incidentService = {
       const severity = data.severity !== undefined ? data.severity : row.severity;
       const startTime = data.startTime !== undefined ? data.startTime : row.start_time;
       const endTime = data.endTime !== undefined ? data.endTime : row.end_time;
-      const componentId = data.componentId !== undefined ? data.component_id : row.component_id;
 
       const res = await client.query(
-        'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5, component_id=$6 WHERE id=$7 RETURNING id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime"',
-        [title, description, severity, startTime, endTime, componentId, id]
+        'UPDATE incidents SET title=$1, description=$2, severity=$3, start_time=$4, end_time=$5 WHERE id=$6 RETURNING id, title, description, severity, start_time as "startTime", end_time as "endTime"',
+        [title, description, severity, startTime, endTime, id]
       );
+
+      if (data.componentIds && Array.isArray(data.componentIds)) {
+        await client.query('DELETE FROM incident_affected_components WHERE incident_id = $1', [id]);
+        for (const compId of data.componentIds) {
+          await client.query('INSERT INTO incident_affected_components (incident_id, component_id) VALUES ($1, $2)', [id, compId]);
+        }
+      }
 
       const isNowResolved = endTime !== null;
       const isNewlyResolved = isNowResolved && !wasResolved;
@@ -50,7 +61,8 @@ export const incidentService = {
         await this.notify(id, 'RESOLVED');
       }
       
-      return res.rows[0];
+      const compIdsRes = await client.query('SELECT component_id FROM incident_affected_components WHERE incident_id = $1', [id]);
+      return { ...res.rows[0], componentIds: compIdsRes.rows.map(r => r.component_id) };
     });
   },
 
@@ -64,16 +76,19 @@ export const incidentService = {
       const recipients = subscribersRes.rows.map(r => r.email);
       if (recipients.length === 0) return;
 
-      const incidentRes = await pool.query(`
-        SELECT i.*, c.name as comp_name, r.name as reg_name
-        FROM incidents i
-        JOIN components c ON i.component_id = c.id
-        JOIN regions r ON c.region_id = r.id
-        WHERE i.id = $1
-      `, [incidentId]);
-      
+      const incidentRes = await pool.query('SELECT * FROM incidents WHERE id = $1', [incidentId]);
       if (incidentRes.rows.length === 0) return;
       const incident = incidentRes.rows[0];
+
+      const compsRes = await pool.query(`
+        SELECT c.name as comp_name, r.name as reg_name
+        FROM incident_affected_components iac
+        JOIN components c ON iac.component_id = c.id
+        JOIN regions r ON c.region_id = r.id
+        WHERE iac.incident_id = $1
+      `, [incidentId]);
+      
+      const affectedInfo = compsRes.rows.map(r => `${r.comp_name} (${r.reg_name})`).join(', ');
 
       const templateKey = type === 'NEW' ? 'incident_new_template' : 'incident_resolved_template';
       const templateRes = await pool.query('SELECT value FROM notification_settings WHERE key = $1', [templateKey]);
@@ -81,8 +96,8 @@ export const incidentService = {
 
       const placeholders: Record<string, string> = {
         '{title}': incident.title,
-        '{component}': incident.comp_name,
-        '{region}': incident.reg_name,
+        '{component}': affectedInfo,
+        '{region}': compsRes.rows[0]?.reg_name || 'Global',
         '{severity}': incident.severity
       };
 

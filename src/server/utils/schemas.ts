@@ -10,10 +10,12 @@ export const loginSchema = z.object({
 
 export const incidentSchema = z.object({
   body: z.object({
-    componentId: z.string().uuid(),
+    componentIds: z.array(z.string().uuid()).min(1),
     title: z.string().min(5).max(100),
     description: z.string().min(10).max(2000),
     severity: z.enum(['OPERATIONAL', 'DEGRADED', 'OUTAGE']),
+    startTime: z.string().optional(),
+    endTime: z.string().optional().nullable(),
   }),
 });
 

@@ -50,10 +50,17 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
 
 router.get('/status', async (req, res) => {
   try {
-    const regions = await pool.query('SELECT id, name FROM regions WHERE deleted_at IS NULL');
-    const components = await pool.query('SELECT id, region_id as "regionId", name, description, created_at as "createdAt" FROM components WHERE deleted_at IS NULL');
-    const incidents = await pool.query('SELECT id, component_id as "componentId", title, description, severity, start_time as "startTime", end_time as "endTime" FROM incidents ORDER BY start_time DESC');
-    res.json({ regions: regions.rows, components: components.rows, incidents: incidents.rows });
+    const regions = await pool.query('SELECT id, name FROM regions WHERE deleted_at IS NULL ORDER BY name ASC');
+    const components = await pool.query('SELECT id, region_id as "regionId", name, description, created_at as "createdAt" FROM components WHERE deleted_at IS NULL ORDER BY name ASC');
+    const incidentsRes = await pool.query('SELECT id, title, description, severity, start_time as "startTime", end_time as "endTime" FROM incidents ORDER BY start_time DESC');
+    
+    const incidents = [];
+    for (const inc of incidentsRes.rows) {
+      const compIdsRes = await pool.query('SELECT component_id FROM incident_affected_components WHERE incident_id = $1', [inc.id]);
+      incidents.push({ ...inc, componentIds: compIdsRes.rows.map(r => r.component_id) });
+    }
+
+    res.json({ regions: regions.rows, components: components.rows, incidents });
   } catch (err: any) {
     console.error('[API ERROR] /api/status:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -132,6 +139,15 @@ router.post('/admin/components', nodeAuth, validate(componentSchema), async (req
     const { regionId, name, description } = req.body;
     const result = await pool.query('INSERT INTO components (region_id, name, description) VALUES ($1, $2, $3) RETURNING id, region_id as "regionId", name, description', [regionId, name, description]);
     await auditService.log(req.user.username, AuditAction.CREATE_COMPONENT, 'COMPONENT', name);
+    res.json(result.rows[0]);
+  } catch (err: any) { res.status(500).json({ error: 'Internal Server Error' }); }
+});
+
+router.put('/admin/components/:id', nodeAuth, validate(componentSchema), async (req: AuthRequest, res) => {
+  try {
+    const { name, description } = req.body;
+    const result = await pool.query('UPDATE components SET name=$1, description=$2 WHERE id=$3 RETURNING id, region_id as "regionId", name, description', [name, description, req.params.id]);
+    await auditService.log(req.user.username, AuditAction.UPDATE_COMPONENT, 'COMPONENT', name);
     res.json(result.rows[0]);
   } catch (err: any) { res.status(500).json({ error: 'Internal Server Error' }); }
 });

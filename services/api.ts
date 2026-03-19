@@ -126,6 +126,11 @@ export const createRemoteApi = (config: RemoteDashboardConfig) => {
       const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify({ regionId, name, description }) });
       return handleResponse(res, url);
     },
+    async updateComponent(id: string, regionId: string, name: string, description: string) {
+      const url = `${base}/api/admin/components/${id}`;
+      const res = await safeFetch(url, { method: 'PUT', headers, body: JSON.stringify({ regionId, name, description }) });
+      return handleResponse(res, url);
+    },
     async deleteComponent(id: string) {
       const url = `${base}/api/admin/components/${id}`;
       const res = await safeFetch(url, { method: 'DELETE', headers });
