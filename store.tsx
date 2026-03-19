@@ -170,7 +170,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Filter incidents that overlap with the period and affect this component
     const componentIncidents = state.incidents.filter(i => 
-      i.componentIds.includes(componentId) && 
+      (i.componentIds || []).includes(componentId) && 
       new Date(i.startTime).getTime() < now &&
       (!i.endTime || new Date(i.endTime).getTime() > periodStart)
     );

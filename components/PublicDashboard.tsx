@@ -54,7 +54,7 @@ const PublicDashboard: React.FC = () => {
   };
 
   const getComponentStatus = (componentId: string) => {
-    const activeIncidents = state.incidents.filter(i => i.componentIds.includes(componentId) && !i.endTime);
+    const activeIncidents = state.incidents.filter(i => (i.componentIds || []).includes(componentId) && !i.endTime);
     if (activeIncidents.find(i => i.severity === Severity.OUTAGE)) return Severity.OUTAGE;
     if (activeIncidents.find(i => i.severity === Severity.DEGRADED)) return Severity.DEGRADED;
     return Severity.OPERATIONAL;
@@ -235,7 +235,7 @@ const PublicDashboard: React.FC = () => {
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">{date}</h3>
                 <div className="space-y-4">
                   {incidents.map(incident => {
-                    const affectedComponents = state.components.filter(c => incident.componentIds.includes(c.id));
+                    const affectedComponents = state.components.filter(c => (incident.componentIds || []).includes(c.id));
                     const uniqueRegions = Array.from(new Set(affectedComponents.map(c => c.regionId)))
                       .map(rid => state.regions.find(r => r.id === rid))
                       .filter(Boolean);

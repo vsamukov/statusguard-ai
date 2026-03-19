@@ -42,12 +42,12 @@ const ReportingTab: React.FC = () => {
   }, [state.templates, form.componentIds, state.components]);
 
   const handleEdit = (inc: Incident) => {
-    const firstComp = state.components.find(c => inc.componentIds.includes(c.id));
+    const firstComp = state.components.find(c => (inc.componentIds || []).includes(c.id));
     setEditingIncident(inc);
     setForm({
       ...initialForm,
       regionId: firstComp?.regionId || '',
-      componentIds: inc.componentIds,
+      componentIds: inc.componentIds || [],
       title: inc.title,
       severity: inc.severity,
       description: inc.description,
@@ -200,7 +200,7 @@ const ReportingTab: React.FC = () => {
               <div className="flex flex-col">
                  <span className="text-sm font-bold text-gray-800">{inc.title}</span>
                  <div className="flex flex-wrap gap-1 mt-1">
-                   {inc.componentIds.map(cid => {
+                   {(inc.componentIds || []).map(cid => {
                      const comp = state.components.find(c => c.id === cid);
                      return comp ? (
                        <span key={cid} className="text-[8px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded uppercase font-bold">
@@ -241,7 +241,7 @@ const ReportingTab: React.FC = () => {
               </div>
               <h4 className="text-sm font-bold text-gray-800 leading-snug">{inc.title}</h4>
               <div className="flex flex-wrap gap-1 mt-2">
-                {inc.componentIds.map(cid => {
+                {(inc.componentIds || []).map(cid => {
                   const comp = state.components.find(c => c.id === cid);
                   return comp ? (
                     <span key={cid} className="text-[8px] px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded uppercase font-black">
