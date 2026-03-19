@@ -60,6 +60,13 @@ const PublicDashboard: React.FC = () => {
     return Severity.OPERATIONAL;
   };
 
+  const getRegionStatus = (regionComponents: any[]) => {
+    const statuses = regionComponents.map(c => getComponentStatus(c.id));
+    if (statuses.includes(Severity.OUTAGE)) return Severity.OUTAGE;
+    if (statuses.includes(Severity.DEGRADED)) return Severity.DEGRADED;
+    return Severity.OPERATIONAL;
+  };
+
   const regionsWithComponents = React.useMemo(() => {
     return [...state.regions]
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -170,6 +177,7 @@ const PublicDashboard: React.FC = () => {
         ) : (
           regionsWithComponents.map(region => {
             const isExpanded = expandedRegions.includes(region.id);
+            const regionStatus = getRegionStatus(region.components);
             return (
               <div key={region.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" role="region" aria-labelledby={`region-${region.id}`}>
                  <button 
@@ -182,8 +190,14 @@ const PublicDashboard: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-4">
                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                          <span className="text-[10px] font-bold text-gray-400 uppercase">Operational</span>
+                          <div className={`w-2 h-2 rounded-full ${
+                            regionStatus === Severity.OPERATIONAL ? 'bg-emerald-500' :
+                            regionStatus === Severity.DEGRADED ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}></div>
+                          <span className={`text-[10px] font-bold uppercase ${
+                            regionStatus === Severity.OPERATIONAL ? 'text-gray-400' :
+                            regionStatus === Severity.DEGRADED ? 'text-yellow-600' : 'text-red-600'
+                          }`}>{regionStatus}</span>
                        </div>
                        <svg className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
