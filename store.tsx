@@ -125,7 +125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.isAuthenticated, fetchData]);
+  }, [state.isAuthenticated]);
 
   useEffect(() => {
     if (IS_HUB_MODE && state.activeDashboardId) {
