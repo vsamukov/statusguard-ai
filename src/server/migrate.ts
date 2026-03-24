@@ -66,6 +66,20 @@ export const migrateDb = async (isHub: boolean) => {
       }
     }
 
+    // Migration: Add last_noc_notified_at column to incidents if missing
+    const nocColCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = 'incidents' 
+      AND column_name = 'last_noc_notified_at'
+    `);
+    
+    if (nocColCheck.rows.length === 0) {
+      console.log(`[DB] Migrating: Adding 'last_noc_notified_at' column to incidents...`);
+      await client.query(`ALTER TABLE incidents ADD COLUMN last_noc_notified_at TIMESTAMP WITH TIME ZONE`);
+    }
+
     // Ensure incidents table exists
     await client.query(`
       CREATE TABLE IF NOT EXISTS incidents (

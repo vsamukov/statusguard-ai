@@ -14,6 +14,7 @@ import nodeRoutes from './routes/node.js';
 import hubRoutes from './routes/hub.js';
 import { migrateDb } from './migrate.js';
 import { MODE, IS_HUB, PORT } from './config.js';
+import { incidentService } from './services/incidentService.js';
 
 const app = express();
 const rootPath = path.resolve();
@@ -160,6 +161,15 @@ app.get('*', (req, res) => {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`[SERVICE] Running on port ${PORT} (MODE=${MODE})`);
     });
+
+    // Background task for NOC notifications (every 10 minutes)
+    if (!IS_HUB) {
+      setInterval(() => {
+        incidentService.checkOpenIncidentsAndNotifyNOC();
+      }, 10 * 60 * 1000);
+      // Run once on startup
+      incidentService.checkOpenIncidentsAndNotifyNOC();
+    }
   } catch (err) {
     console.error('[FATAL] Service failed to start:', err);
     process.exit(1);
