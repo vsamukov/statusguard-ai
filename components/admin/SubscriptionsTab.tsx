@@ -13,6 +13,7 @@ const SubscriptionsTab: React.FC = () => {
   const [isListLoading, setIsListLoading] = useState(false);
   
   const [newEmail, setNewEmail] = useState('');
+  const [newRegionId, setNewRegionId] = useState('');
   const [editingSub, setEditingSub] = useState<{ id: string, email: string } | null>(null);
   const [settingsForm, setSettingsForm] = useState<NotificationSettings>(state.notificationSettings);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -36,11 +37,12 @@ const SubscriptionsTab: React.FC = () => {
 
   const handleAddSubscriber = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail) return;
+    if (!newEmail || !newRegionId) return alert("Email and Region are required");
     setIsProcessing(true);
     try {
-      await addSubscriber(newEmail);
+      await addSubscriber(newEmail, newRegionId);
       setNewEmail('');
+      setNewRegionId('');
       setPage(1);
       fetchList();
     } catch (err) {
@@ -108,7 +110,7 @@ const SubscriptionsTab: React.FC = () => {
             />
           </div>
 
-          <form onSubmit={handleAddSubscriber} className="flex gap-2 mb-6 p-4 bg-gray-50 rounded-xl">
+          <form onSubmit={handleAddSubscriber} className="flex flex-col md:flex-row gap-2 mb-6 p-4 bg-gray-50 rounded-xl">
             <input 
               required
               type="email"
@@ -117,17 +119,33 @@ const SubscriptionsTab: React.FC = () => {
               value={newEmail}
               onChange={e => setNewEmail(e.target.value)}
             />
+            <select
+              required
+              className="bg-white border border-gray-200 p-2.5 rounded-lg text-sm outline-none"
+              value={newRegionId}
+              onChange={e => setNewRegionId(e.target.value)}
+            >
+              <option value="">Select Region...</option>
+              {(state.regions || []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
             <button 
               type="submit"
               disabled={isProcessing}
-              className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50"
+              className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50 whitespace-nowrap"
             >
-              Add
+              Add Subscriber
             </button>
           </form>
 
           <div className="flex-1">
             <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-100">
+                <tr>
+                  <th className="py-3 px-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Email</th>
+                  <th className="py-3 px-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Regions</th>
+                  <th className="py-3 px-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
+                </tr>
+              </thead>
               <tbody className="divide-y divide-gray-50">
                 {(subscribers || []).map(sub => (
                   <tr key={sub.id} className="group hover:bg-gray-50 transition-colors">
@@ -144,6 +162,15 @@ const SubscriptionsTab: React.FC = () => {
                       ) : (
                         <span className="font-medium text-gray-800">{sub.email}</span>
                       )}
+                    </td>
+                    <td className="py-3 px-1">
+                      <div className="flex flex-wrap gap-1">
+                        {(sub.regions || []).map((r: any) => (
+                          <span key={r.id} className="text-[9px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 font-bold rounded uppercase">
+                            {r.name}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="py-3 text-right space-x-3">
                       <button onClick={() => setEditingSub({ id: sub.id, email: sub.email })} className="text-xs text-gray-400 hover:text-indigo-600">Edit</button>

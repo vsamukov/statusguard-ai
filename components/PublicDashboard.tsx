@@ -6,9 +6,6 @@ import UptimeGraph from './UptimeGraph';
 
 const PublicDashboard: React.FC = () => {
   const { state, calculateSLA, addSubscriber: subscribe, removeSubscriber: unsubscribe } = useApp();
-  const [email, setEmail] = useState('');
-  const [subStatus, setSubStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState('');
 
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return 'N/A';
@@ -28,21 +25,6 @@ const PublicDashboard: React.FC = () => {
     const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
     const adjustedDate = new Date(utc + (state.timezoneOffset * 60000));
     return adjustedDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
-  };
-
-  const handleSubscribe = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-    setSubStatus('loading');
-    setErrorMessage('');
-    try {
-      await subscribe(email);
-      setSubStatus('success');
-      setEmail('');
-    } catch (err: any) {
-      setSubStatus('error');
-      setErrorMessage(err.message || 'Subscription failed.');
-    }
   };
 
   const [expandedRegions, setExpandedRegions] = useState<string[]>([]);
@@ -103,20 +85,35 @@ const PublicDashboard: React.FC = () => {
   };
 
   const getComponentStatus = (componentId: string) => {
-    if (!state.incidents) return Severity.OPERATIONAL;
-    const activeIncidents = state.incidents.filter(i => 
-      !i.endTime && 
-      (i.componentIds || []).some(cid => String(cid) === String(componentId))
-    );
+    if (!state.incidents || !Array.isArray(state.incidents)) return Severity.OPERATIONAL;
     
-    if (activeIncidents.some(i => String(i.severity).toUpperCase() === Severity.OUTAGE)) return Severity.OUTAGE;
-    if (activeIncidents.some(i => String(i.severity).toUpperCase() === Severity.DEGRADED)) return Severity.DEGRADED;
+    const activeIncidents = state.incidents.filter(i => {
+      const isOngoing = !i.endTime;
+      const affectsComponent = (i.componentIds || []).some(cid => 
+        String(cid).toLowerCase() === String(componentId).toLowerCase()
+      );
+      return isOngoing && affectsComponent;
+    });
+    
+    if (activeIncidents.length === 0) return Severity.OPERATIONAL;
+
+    const hasOutage = activeIncidents.some(i => 
+      String(i.severity).toUpperCase() === Severity.OUTAGE
+    );
+    if (hasOutage) return Severity.OUTAGE;
+
+    const hasDegradation = activeIncidents.some(i => 
+      String(i.severity).toUpperCase() === Severity.DEGRADED
+    );
+    if (hasDegradation) return Severity.DEGRADED;
+
     return Severity.OPERATIONAL;
   };
 
   const getRegionStatus = (regionComponents: any[]) => {
     if (!regionComponents || regionComponents.length === 0) return Severity.OPERATIONAL;
     const statuses = regionComponents.map(c => getComponentStatus(c.id));
+    
     if (statuses.includes(Severity.OUTAGE)) return Severity.OUTAGE;
     if (statuses.includes(Severity.DEGRADED)) return Severity.DEGRADED;
     return Severity.OPERATIONAL;

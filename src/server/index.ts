@@ -38,7 +38,7 @@ app.use(cors({
 }));
 
 app.use(morgan('combined'));
-app.use(express.json({ limit: '10kb' })); // Limit body size
+app.use(express.json({ limit: '1mb' })); // Limit body size
 app.use(cookieParser());
 
 // Rate Limiting

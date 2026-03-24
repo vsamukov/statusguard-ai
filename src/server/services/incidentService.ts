@@ -5,7 +5,7 @@ import { subscriptionService } from './subscriptionService.js';
 
 export const incidentService = {
   async createIncident(username: string, data: any) {
-    return await withTransaction(async (client) => {
+    const incident = await withTransaction(async (client) => {
       const res = await client.query(
         'INSERT INTO incidents (title, description, severity, start_time, end_time) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, description, severity, start_time as "startTime", end_time as "endTime"',
         [data.title, data.description, data.severity, data.startTime, data.endTime]
@@ -19,14 +19,17 @@ export const incidentService = {
       }
 
       await auditService.log(username, AuditAction.CREATE_INCIDENT, 'INCIDENT', data.title, JSON.stringify({ severity: data.severity }));
-      await this.notify(incidentId, 'NEW');
       
       return { ...res.rows[0], componentIds: data.componentIds || [] };
     });
+
+    // Notify after commit
+    await this.notify(incident.id, 'NEW');
+    return incident;
   },
 
   async updateIncident(username: string, id: string, data: any) {
-    return await withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       const currentRes = await client.query('SELECT * FROM incidents WHERE id = $1', [id]);
       if (currentRes.rows.length === 0) throw new Error('Incident not found');
       
@@ -57,13 +60,18 @@ export const incidentService = {
       const actionType = isNewlyResolved ? AuditAction.RESOLVE_INCIDENT : AuditAction.UPDATE_INCIDENT;
       await auditService.log(username, actionType, 'INCIDENT', title);
 
-      if (isNewlyResolved) {
-        await this.notify(id, 'RESOLVED');
-      }
-      
       const compIdsRes = await client.query('SELECT component_id FROM incident_affected_components WHERE incident_id = $1', [id]);
-      return { ...res.rows[0], componentIds: compIdsRes.rows.map(r => r.component_id) };
+      return { 
+        incident: { ...res.rows[0], componentIds: compIdsRes.rows.map(r => r.component_id) },
+        isNewlyResolved 
+      };
     });
+
+    if (result.isNewlyResolved) {
+      await this.notify(id, 'RESOLVED');
+    }
+    
+    return result.incident;
   },
 
   async resolveIncident(username: string, id: string) {
