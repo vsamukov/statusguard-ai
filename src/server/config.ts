@@ -10,6 +10,17 @@ export const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 export const ADMIN_PASS = process.env.ADMIN_PASS || 'password';
 export const ADMIN_SECRET = process.env.ADMIN_SECRET || 'secret-node-1';
 
+// Parse HUB Users
+let hubUsers: Record<string, string> = { [ADMIN_USER]: ADMIN_PASS };
+try {
+  const raw = (process.env.HUB_USERS || '{}').trim();
+  const parsed = JSON.parse(raw);
+  hubUsers = { ...hubUsers, ...parsed };
+} catch (e) {
+  console.error('[CONFIG] Failed to parse HUB_USERS:', e);
+}
+export const HUB_USERS = hubUsers;
+
 // Parse Dashboards
 let dashboards: any[] = [];
 try {

@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { hubAuth, AuthRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
 import { loginSchema } from '../utils/schemas.js';
-import { JWT_SECRET, ADMIN_USER, ADMIN_PASS, DASHBOARD_CONFIGS } from '../config.js';
+import { JWT_SECRET, HUB_USERS, DASHBOARD_CONFIGS } from '../config.js';
 
 const router = Router();
 
@@ -14,26 +14,22 @@ router.post('/auth', validate(loginSchema), async (req, res) => {
   
   console.log(`[HUB] Login attempt for user: ${username}`);
 
-  const isUserMatch = username === ADMIN_USER;
+  const userPass = HUB_USERS[username];
   let isPassMatch = false;
 
-  if (isUserMatch) {
-    // Check if adminPass is a bcrypt hash
-    if (ADMIN_PASS.startsWith('$2')) {
-      isPassMatch = await bcrypt.compare(password, ADMIN_PASS);
-      console.log(`[HUB] Password comparison (bcrypt): ${isPassMatch}`);
+  if (userPass) {
+    // Check if userPass is a bcrypt hash
+    if (userPass.startsWith('$2')) {
+      isPassMatch = await bcrypt.compare(password, userPass);
     } else {
       // Fallback for plaintext (not recommended for production)
-      isPassMatch = password === ADMIN_PASS;
-      console.log(`[HUB] Password comparison (plaintext): ${isPassMatch}`);
+      isPassMatch = password === userPass;
     }
-  } else {
-    console.warn(`[HUB] User mismatch: expected ${ADMIN_USER}, got ${username}`);
   }
 
-  if (isUserMatch && isPassMatch) {
+  if (userPass && isPassMatch) {
     const token = jwt.sign({ username, role: 'hub-admin' }, JWT_SECRET, { expiresIn: '24h' });
-    console.log(`[HUB] Login successful, token generated`);
+    console.log(`[HUB] Login successful for user ${username}`);
     
     res.cookie('vox_hub_session', token, { 
       httpOnly: true, 

@@ -37,11 +37,15 @@ export const nodeApi = {
   }
 };
 
-export const createRemoteApi = (config: RemoteDashboardConfig) => {
+export const createRemoteApi = (config: RemoteDashboardConfig, token?: string | null) => {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-ADMIN-SECRET': config.adminSecret,
   };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   
   // Robust URL formatting: ensure protocol exists and no trailing slash
   let base = config.url.trim();

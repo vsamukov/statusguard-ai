@@ -64,10 +64,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const remoteApi = useMemo(() => {
     if (IS_HUB_MODE) {
-      return activeDashboard ? createRemoteApi(activeDashboard) : null;
+      const token = localStorage.getItem(TOKEN_KEY);
+      return activeDashboard ? createRemoteApi(activeDashboard, token) : null;
     }
     return nodeApi;
-  }, [activeDashboard]);
+  }, [activeDashboard, state.isAuthenticated]);
 
   const fetchData = useCallback(async () => {
     try {
