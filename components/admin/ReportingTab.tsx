@@ -9,6 +9,8 @@ const ReportingTab: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState('');
 
   const initialForm = {
     regionId: '',
@@ -70,11 +72,22 @@ const ReportingTab: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.componentIds.length === 0) return alert('Select at least one component.');
+    
+    if (!editingIncident) {
+      setConfirmTitle(form.title);
+      setIsConfirmModalOpen(true);
+      return;
+    }
+
+    await executeSave(form.title);
+  };
+
+  const executeSave = async (finalTitle: string) => {
     setIsProcessing(true);
     try {
       const payload = {
         componentIds: form.componentIds,
-        title: form.title,
+        title: finalTitle,
         severity: form.severity,
         description: form.description,
         startTime: new Date(form.startTime).toISOString(),
@@ -87,12 +100,13 @@ const ReportingTab: React.FC = () => {
           const comp = state.components.find(c => c.id === form.componentIds[0]);
           if (comp) {
             await addTemplate({
-              componentName: comp.name, name: form.templateName, title: form.title, description: form.description
+              componentName: comp.name, name: form.templateName, title: finalTitle, description: form.description
             });
           }
         }
       }
       handleCancelEdit();
+      setIsConfirmModalOpen(false);
     } catch (err: any) { alert(`Failed: ${err.message}`); }
     finally { setIsProcessing(false); }
   };
@@ -171,7 +185,14 @@ const ReportingTab: React.FC = () => {
                 <option value={Severity.DEGRADED}>🟡 Degradation</option>
                 <option value={Severity.OUTAGE}>🔴 Outage</option>
               </select>
-              <input required placeholder="Headline" className="w-full bg-gray-50 border p-3 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+              <input 
+                required 
+                placeholder="Headline" 
+                className={`w-full bg-gray-50 border p-3 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 ${editingIncident ? 'opacity-50 cursor-not-allowed' : ''}`} 
+                value={form.title} 
+                onChange={e => setForm({...form, title: e.target.value})} 
+                disabled={!!editingIncident}
+              />
             </div>
 
             <textarea required placeholder="Message" rows={4} className="w-full bg-gray-50 border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
@@ -275,6 +296,44 @@ const ReportingTab: React.FC = () => {
           )}
         </div>
       </div>
+
+      {isConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Incident Title</h3>
+            <p className="text-sm text-gray-500 mb-6">The title cannot be changed once the incident is reported. Please verify it one last time.</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Incident Title</label>
+                <input 
+                  className="w-full bg-gray-50 border p-3 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" 
+                  value={confirmTitle} 
+                  onChange={e => setConfirmTitle(e.target.value)} 
+                />
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setIsConfirmModalOpen(false)} 
+                  className="flex-1 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                  Go Back
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => executeSave(confirmTitle)} 
+                  disabled={isProcessing}
+                  className="flex-1 px-4 py-3 text-sm font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                >
+                  {isProcessing ? 'Publishing...' : 'Confirm & Publish'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

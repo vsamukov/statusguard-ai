@@ -37,7 +37,7 @@ export const incidentService = {
       const row = currentRes.rows[0];
       const wasResolved = row.end_time !== null;
 
-      const title = data.title !== undefined ? data.title : row.title;
+      const title = row.title; // Title is immutable once created
       const description = data.description !== undefined ? data.description : row.description;
       const severity = data.severity !== undefined ? data.severity : row.severity;
       const startTime = data.startTime !== undefined ? data.startTime : row.start_time;
