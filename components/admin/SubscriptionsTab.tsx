@@ -14,7 +14,7 @@ const SubscriptionsTab: React.FC = () => {
   
   const [newEmail, setNewEmail] = useState('');
   const [newRegionIds, setNewRegionIds] = useState<string[]>([]);
-  const [editingSub, setEditingSub] = useState<{ id: string, email: string } | null>(null);
+  const [editingSub, setEditingSub] = useState<{ id: string, email: string, regionIds: string[] } | null>(null);
   const [settingsForm, setSettingsForm] = useState<NotificationSettings>(state.notificationSettings);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -61,9 +61,10 @@ const SubscriptionsTab: React.FC = () => {
   const handleUpdateSubscriber = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSub) return;
+    if (editingSub.regionIds.length === 0) return alert("At least one region must be selected");
     setIsProcessing(true);
     try {
-      await updateSubscriber(editingSub.id, editingSub.email);
+      await updateSubscriber(editingSub.id, editingSub.email, editingSub.regionIds);
       setEditingSub(null);
       fetchList();
     } catch (err) {
@@ -172,13 +173,40 @@ const SubscriptionsTab: React.FC = () => {
                   <tr key={sub.id} className="group hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-1">
                       {editingSub?.id === sub.id ? (
-                        <form onSubmit={handleUpdateSubscriber} className="flex gap-2">
-                          <input 
-                            className="border rounded px-2 py-0.5 w-full"
-                            value={editingSub.email}
-                            onChange={e => setEditingSub({ ...editingSub, email: e.target.value })}
-                          />
-                          <button type="submit" className="text-indigo-600 font-bold">Save</button>
+                        <form onSubmit={handleUpdateSubscriber} className="space-y-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Email</label>
+                            <input 
+                              className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-400"
+                              value={editingSub.email}
+                              onChange={e => setEditingSub({ ...editingSub, email: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Regions</label>
+                            <div className="bg-white border border-indigo-200 rounded-lg p-2 max-h-24 overflow-y-auto space-y-1">
+                              {(state.regions || []).map(r => (
+                                <label key={r.id} className="flex items-center gap-2 cursor-pointer">
+                                  <input 
+                                    type="checkbox"
+                                    className="w-3 h-3 rounded border-gray-300 text-indigo-600"
+                                    checked={editingSub.regionIds.includes(r.id)}
+                                    onChange={() => {
+                                      const rids = editingSub.regionIds.includes(r.id)
+                                        ? editingSub.regionIds.filter(id => id !== r.id)
+                                        : [...editingSub.regionIds, r.id];
+                                      setEditingSub({ ...editingSub, regionIds: rids });
+                                    }}
+                                  />
+                                  <span className="text-[10px] font-medium text-gray-600">{r.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button type="button" onClick={() => setEditingSub(null)} className="text-[10px] font-bold text-gray-400 hover:text-gray-600">Cancel</button>
+                            <button type="submit" className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-700">Save Changes</button>
+                          </div>
                         </form>
                       ) : (
                         <span className="font-medium text-gray-800">{sub.email}</span>
@@ -194,7 +222,7 @@ const SubscriptionsTab: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3 text-right space-x-3">
-                      <button onClick={() => setEditingSub({ id: sub.id, email: sub.email })} className="text-xs text-gray-400 hover:text-indigo-600">Edit</button>
+                      <button onClick={() => setEditingSub({ id: sub.id, email: sub.email, regionIds: (sub.regions || []).map((r: any) => r.id) })} className="text-xs text-gray-400 hover:text-indigo-600">Edit</button>
                       <button onClick={() => handleRemoveSubscriber(sub.id, sub.email)} className="text-xs text-red-300 hover:text-red-500">Delete</button>
                     </td>
                   </tr>

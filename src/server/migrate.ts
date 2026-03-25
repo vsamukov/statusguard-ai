@@ -167,6 +167,25 @@ export const migrateDb = async (isHub: boolean) => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_subscriptions_email ON subscriptions(email)');
 
+    // Migration: Add all regions to existing subscribers if they have none
+    console.log('[DB] Migrating: Adding all regions to existing subscribers...');
+    const subscribersWithoutRegions = await client.query(`
+      SELECT s.id FROM subscriptions s
+      LEFT JOIN subscription_regions sr ON s.id = sr.subscription_id
+      WHERE sr.subscription_id IS NULL
+    `);
+    
+    if (subscribersWithoutRegions.rows.length > 0) {
+      const allRegions = await client.query('SELECT id FROM regions WHERE deleted_at IS NULL');
+      if (allRegions.rows.length > 0) {
+        for (const sub of subscribersWithoutRegions.rows) {
+          for (const reg of allRegions.rows) {
+            await client.query('INSERT INTO subscription_regions (subscription_id, region_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [sub.id, reg.id]);
+          }
+        }
+      }
+    }
+
     // Check if services table exists (old schema)
     const tableCheck = await client.query("SELECT to_regclass('public.services') as exists");
     const hasServicesTable = tableCheck.rows[0].exists !== null;

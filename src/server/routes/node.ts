@@ -218,6 +218,30 @@ router.delete('/admin/subscriptions/:id', nodeAuth, async (req: AuthRequest, res
   } catch (err: any) { res.status(500).json({ error: 'Internal Server Error' }); }
 });
 
+router.put('/admin/subscriptions/:id', nodeAuth, validate(subscriptionSchema), async (req: AuthRequest, res) => {
+  try {
+    const { email, regionIds } = req.body;
+    const { id } = req.params;
+    
+    // Update email
+    await pool.query('UPDATE subscriptions SET email = $1 WHERE id = $2', [email, id]);
+    
+    // Replace regions
+    await pool.query('DELETE FROM subscription_regions WHERE subscription_id = $1', [id]);
+    if (regionIds && regionIds.length > 0) {
+      for (const rid of regionIds) {
+        await pool.query('INSERT INTO subscription_regions (subscription_id, region_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, rid]);
+      }
+    }
+    
+    await auditService.log(req.user.username, AuditAction.UPDATE_SETTINGS, 'SUBSCRIBER', email);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[API ERROR] /admin/subscriptions/:id:', err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 router.post('/admin/notification-settings', nodeAuth, async (req: AuthRequest, res) => {
   try {
     const { incidentNewTemplate, incidentResolvedTemplate } = req.body;

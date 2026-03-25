@@ -106,6 +106,11 @@ export const createRemoteApi = (config: RemoteDashboardConfig) => {
       const res = await safeFetch(url, { method: 'DELETE', headers });
       return handleResponse(res, url);
     },
+    async updateSubscriber(id: string, email: string, regionIds: string[]) {
+      const url = `${base}/api/admin/subscriptions/${id}`;
+      const res = await safeFetch(url, { method: 'PUT', headers, body: JSON.stringify({ email, regionIds }) });
+      return handleResponse(res, url);
+    },
     async updateNotificationSettings(settings: any) {
       const url = `${base}/api/admin/notification-settings`;
       const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify(settings) });

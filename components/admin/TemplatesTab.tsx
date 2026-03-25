@@ -51,37 +51,46 @@ const TemplatesTab: React.FC = () => {
           <form onSubmit={handleSave} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg animate-in zoom-in-95">
             <h3 className="font-bold text-lg mb-6">{editing.id ? 'Edit Template' : 'New Template'}</h3>
             <div className="space-y-4">
-              <select 
-                required
-                className="w-full border p-3 rounded-lg"
-                value={editing.componentName}
-                onChange={e => setEditing({ ...editing, componentName: e.target.value })}
-              >
-                <option value="">Target Component Name...</option>
-                {(componentNames || []).map(name => <option key={name} value={name}>{name}</option>)}
-              </select>
-              <input 
-                required
-                placeholder="Internal Template Name"
-                className="w-full border p-3 rounded-lg"
-                value={editing.name}
-                onChange={e => setEditing({ ...editing, name: e.target.value })}
-              />
-              <input 
-                required
-                placeholder="Public Headline"
-                className="w-full border p-3 rounded-lg font-bold"
-                value={editing.title}
-                onChange={e => setEditing({ ...editing, title: e.target.value })}
-              />
-              <textarea 
-                required
-                placeholder="Template Content"
-                rows={6}
-                className="w-full border p-3 rounded-lg text-sm"
-                value={editing.description}
-                onChange={e => setEditing({ ...editing, description: e.target.value })}
-              />
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Target Component</label>
+                <select 
+                  required
+                  className="w-full border p-3 rounded-lg"
+                  value={editing.componentName}
+                  onChange={e => setEditing({ ...editing, componentName: e.target.value })}
+                >
+                  <option value="">Select Component...</option>
+                  {(componentNames || []).map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Internal Template Name</label>
+                <input 
+                  required
+                  className="w-full border p-3 rounded-lg"
+                  value={editing.name}
+                  onChange={e => setEditing({ ...editing, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Public Headline</label>
+                <input 
+                  required
+                  className="w-full border p-3 rounded-lg font-bold"
+                  value={editing.title}
+                  onChange={e => setEditing({ ...editing, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Template Content</label>
+                <textarea 
+                  required
+                  rows={6}
+                  className="w-full border p-3 rounded-lg text-sm"
+                  value={editing.description}
+                  onChange={e => setEditing({ ...editing, description: e.target.value })}
+                />
+              </div>
             </div>
             <div className="flex gap-2 mt-6">
               <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold">Save Template</button>
