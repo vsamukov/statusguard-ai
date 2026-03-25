@@ -13,7 +13,7 @@ const SubscriptionsTab: React.FC = () => {
   const [isListLoading, setIsListLoading] = useState(false);
   
   const [newEmail, setNewEmail] = useState('');
-  const [newRegionId, setNewRegionId] = useState('');
+  const [newRegionIds, setNewRegionIds] = useState<string[]>([]);
   const [editingSub, setEditingSub] = useState<{ id: string, email: string } | null>(null);
   const [settingsForm, setSettingsForm] = useState<NotificationSettings>(state.notificationSettings);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,12 +37,12 @@ const SubscriptionsTab: React.FC = () => {
 
   const handleAddSubscriber = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail || !newRegionId) return alert("Email and Region are required");
+    if (!newEmail || newRegionIds.length === 0) return alert("Email and at least one Region are required");
     setIsProcessing(true);
     try {
-      await addSubscriber(newEmail, newRegionId);
+      await addSubscriber(newEmail, newRegionIds);
       setNewEmail('');
-      setNewRegionId('');
+      setNewRegionIds([]);
       setPage(1);
       fetchList();
     } catch (err) {
@@ -50,6 +50,12 @@ const SubscriptionsTab: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const toggleNewRegion = (id: string) => {
+    setNewRegionIds(prev => 
+      prev.includes(id) ? prev.filter(rid => rid !== id) : [...prev, id]
+    );
   };
 
   const handleUpdateSubscriber = async (e: React.FormEvent) => {
@@ -110,31 +116,46 @@ const SubscriptionsTab: React.FC = () => {
             />
           </div>
 
-          <form onSubmit={handleAddSubscriber} className="flex flex-col md:flex-row gap-2 mb-6 p-4 bg-gray-50 rounded-xl">
-            <input 
-              required
-              type="email"
-              placeholder="email@example.com"
-              className="flex-1 bg-white border border-gray-200 p-2.5 rounded-lg text-sm outline-none"
-              value={newEmail}
-              onChange={e => setNewEmail(e.target.value)}
-            />
-            <select
-              required
-              className="bg-white border border-gray-200 p-2.5 rounded-lg text-sm outline-none"
-              value={newRegionId}
-              onChange={e => setNewRegionId(e.target.value)}
-            >
-              <option value="">Select Region...</option>
-              {(state.regions || []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-            <button 
-              type="submit"
-              disabled={isProcessing}
-              className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold text-sm disabled:opacity-50 whitespace-nowrap"
-            >
-              Add Subscriber
-            </button>
+          <form onSubmit={handleAddSubscriber} className="flex flex-col gap-4 mb-6 p-6 bg-gray-50 rounded-2xl border border-gray-100">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subscriber Email</label>
+                <input 
+                  required
+                  type="email"
+                  placeholder="email@example.com"
+                  className="w-full bg-white border border-gray-200 p-3 rounded-xl text-sm outline-none focus:border-indigo-300 transition-colors"
+                  value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                />
+              </div>
+              <div className="flex-1 space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Select Regions</label>
+                <div className="bg-white border border-gray-200 rounded-xl p-3 max-h-32 overflow-y-auto space-y-2">
+                  {(state.regions || []).map(r => (
+                    <label key={r.id} className="flex items-center gap-3 cursor-pointer group">
+                      <input 
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        checked={newRegionIds.includes(r.id)}
+                        onChange={() => toggleNewRegion(r.id)}
+                      />
+                      <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900 transition-colors">{r.name}</span>
+                    </label>
+                  ))}
+                  {(state.regions || []).length === 0 && <p className="text-[10px] text-gray-400 italic">No regions defined</p>}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button 
+                type="submit"
+                disabled={isProcessing}
+                className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold text-sm disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-sm"
+              >
+                {isProcessing ? 'Processing...' : 'Add Subscriber'}
+              </button>
+            </div>
           </form>
 
           <div className="flex-1">

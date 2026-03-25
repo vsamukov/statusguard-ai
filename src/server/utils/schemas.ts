@@ -36,7 +36,11 @@ export const componentSchema = z.object({
 export const subscriptionSchema = z.object({
   body: z.object({
     email: z.string().email(),
-    regionId: z.string().uuid(),
+    regionId: z.string().uuid().optional(),
+    regionIds: z.array(z.string().uuid()).optional(),
+  }).refine(data => data.regionId || (data.regionIds && data.regionIds.length > 0), {
+    message: "Either regionId or regionIds must be provided",
+    path: ["regionId"],
   }),
 });
 

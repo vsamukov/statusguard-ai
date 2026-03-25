@@ -174,12 +174,15 @@ router.delete('/admin/components/:id', nodeAuth, async (req: AuthRequest, res) =
 
 router.post('/subscriptions', validate(subscriptionSchema), async (req, res) => {
   try {
-    const { email, regionId } = req.body;
+    const { email, regionId, regionIds } = req.body;
     const result = await pool.query('INSERT INTO subscriptions (email) VALUES ($1) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id, email, created_at as "createdAt"', [email]);
     const subscriptionId = result.rows[0].id;
     
-    // Link to region
-    await pool.query('INSERT INTO subscription_regions (subscription_id, region_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [subscriptionId, regionId]);
+    // Link to regions
+    const idsToLink = regionIds || (regionId ? [regionId] : []);
+    for (const rid of idsToLink) {
+      await pool.query('INSERT INTO subscription_regions (subscription_id, region_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [subscriptionId, rid]);
+    }
     
     res.json(result.rows[0]);
   } catch (err: any) { 

@@ -46,7 +46,7 @@ const PublicDashboard: React.FC = () => {
       setStatus('loading');
       setError('');
       try {
-        await subscribe(email, regionId);
+        await subscribe(email, [regionId]);
         setStatus('success');
         setEmail('');
       } catch (err: any) {

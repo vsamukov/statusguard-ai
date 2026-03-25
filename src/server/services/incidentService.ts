@@ -185,7 +185,8 @@ export const incidentService = {
           fromEmail: process.env.SMTP_FROM || 'status@voximplant.com',
           subject,
           recipients: [NOC_EMAIL],
-          html
+          html,
+          includeUnsubscribe: false
         });
 
         // Update last_noc_notified_at

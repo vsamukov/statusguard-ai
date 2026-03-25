@@ -8,6 +8,7 @@ export interface SendBroadcastOptions {
   subject: string;
   html: string;
   recipients: string[];
+  includeUnsubscribe?: boolean;
 }
 
 class SubscriptionService {
@@ -59,7 +60,7 @@ class SubscriptionService {
     return expected === token;
   }
 
-  async sendBroadcast({ fromEmail, fromName, subject, html, recipients }: SendBroadcastOptions) {
+  async sendBroadcast({ fromEmail, fromName, subject, html, recipients, includeUnsubscribe = true }: SendBroadcastOptions) {
     if (!this.active || !this.transporter) {
       console.warn('[SUBSCRIPTION SERVICE] Service inactive. Skipping broadcast.');
       return null;
@@ -68,23 +69,22 @@ class SubscriptionService {
     const defaultFrom = process.env.SMTP_FROM || fromEmail || 'status@voximplant.com';
     const senderName = fromName || 'Voximplant Status';
 
-    // To address the "Mass Email Exposure" and "No Unsubscribe Tokens" issues:
-    // We should ideally send individual emails. 
-    // For now, we'll loop through recipients to ensure privacy and allow for future individual tokens.
-    
     const results = [];
     for (const email of recipients) {
       try {
-        // In a real app, we'd generate a unique token per email and store it in DB
-        // For this refactor, we'll just send individual emails to avoid BCC exposure
         const appUrl = process.env.APP_URL || 'http://localhost:3000';
         const unsubscribeUrl = `${appUrl}/api/unsubscribe?email=${encodeURIComponent(email)}&token=${this.generateUnsubscribeToken(email)}`;
+        
+        let finalHtml = html;
+        if (includeUnsubscribe) {
+          finalHtml += `<br><br><p style="font-size: 12px; color: #666;">You are receiving this because you subscribed to Voximplant Status updates. <a href="${unsubscribeUrl}">Unsubscribe</a></p>`;
+        }
         
         const info = await this.transporter.sendMail({
           from: `"${senderName}" <${defaultFrom}>`,
           to: email,
           subject: subject,
-          html: html + `<br><br><p style="font-size: 12px; color: #666;">You are receiving this because you subscribed to Voximplant Status updates. <a href="${unsubscribeUrl}">Unsubscribe</a></p>`,
+          html: finalHtml,
         });
         results.push(info);
       } catch (error: any) {
