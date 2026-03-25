@@ -249,6 +249,18 @@ const ReportingTab: React.FC = () => {
                     </span>
                   ) : null;
                 })}
+                {(() => {
+                  const affectedComponents = (state.components || []).filter(c => (inc.componentIds || []).includes(c.id));
+                  const uniqueRegions = Array.from(new Set(affectedComponents.map(c => c.regionId)))
+                    .map(rid => (state.regions || []).find(r => r.id === rid))
+                    .filter(Boolean);
+                  
+                  return uniqueRegions.length > 0 && (
+                    <span className="text-[8px] px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded uppercase font-black ml-1">
+                      {uniqueRegions.map(r => r?.name).join(', ')}
+                    </span>
+                  );
+                })()}
               </div>
               <p className="text-[10px] text-gray-400 mt-2 font-medium">Started: {new Date(inc.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>

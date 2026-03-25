@@ -180,20 +180,37 @@ const PublicDashboard: React.FC = () => {
             Active Incidents
           </h2>
           <div className="space-y-4">
-            {(state.incidents || []).filter(i => !i.endTime).map(incident => (
-              <div key={incident.id} className="bg-white border-l-4 border-red-500 rounded-lg p-6 shadow-sm">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-bold text-lg">{incident.title}</h3>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                    incident.severity === Severity.OUTAGE ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {incident.severity}
-                  </span>
+            {(state.incidents || []).filter(i => !i.endTime).map(incident => {
+              const affectedComponents = (state.components || []).filter(c => (incident.componentIds || []).includes(c.id));
+              const uniqueRegions = Array.from(new Set(affectedComponents.map(c => c.regionId)))
+                .map(rid => (state.regions || []).find(r => r.id === rid))
+                .filter(Boolean);
+
+              return (
+                <div key={incident.id} className="bg-white border-l-4 border-red-500 rounded-lg p-6 shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-bold text-lg">{incident.title}</h3>
+                      {uniqueRegions.length > 0 && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                            {uniqueRegions.map(r => r?.name).join(', ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                      incident.severity === Severity.OUTAGE ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {incident.severity}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 mb-4">{incident.description}</p>
+                  <div className="text-xs text-gray-400">Detected: {formatDate(incident.startTime)}</div>
                 </div>
-                <p className="text-gray-600 mb-4">{incident.description}</p>
-                <div className="text-xs text-gray-400">Detected: {formatDate(incident.startTime)}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
