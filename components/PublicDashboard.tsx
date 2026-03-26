@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../store';
 import { Severity, Incident } from '../types';
 import UptimeGraph from './UptimeGraph';
@@ -49,38 +50,49 @@ const PublicDashboard: React.FC = () => {
         await subscribe(email, [regionId]);
         setStatus('success');
         setEmail('');
+        setTimeout(() => setStatus('idle'), 3000);
       } catch (err: any) {
         setStatus('error');
         setError(err.message || 'Failed to subscribe');
       }
     };
 
-    if (status === 'success') {
-      return (
-        <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-3 py-1 rounded-full">
-          Subscribed to {regionName} updates!
-        </div>
-      );
-    }
-
     return (
-      <form onSubmit={handleSubmit} className="flex items-center gap-2">
-        <input 
-          type="email" 
-          required
-          placeholder="Email for updates" 
-          className="px-2 py-1 text-[10px] border border-gray-200 rounded outline-none focus:border-indigo-300 transition-colors w-40"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-        />
-        <button 
-          disabled={status === 'loading'}
-          className="bg-indigo-600 text-white px-3 py-1 text-[10px] font-bold rounded hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
-        >
-          {status === 'loading' ? '...' : 'Subscribe'}
-        </button>
-        {status === 'error' && <span className="text-[9px] text-red-500 font-bold">{error}</span>}
-      </form>
+      <div className="relative">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <input 
+            type="email" 
+            required
+            placeholder="Email for updates" 
+            className="px-2 py-1 text-[10px] border border-gray-200 rounded outline-none focus:border-indigo-300 transition-colors w-40"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
+          <button 
+            disabled={status === 'loading'}
+            className="bg-indigo-600 text-white px-3 py-1 text-[10px] font-bold rounded hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
+          >
+            {status === 'loading' ? '...' : 'Subscribe'}
+          </button>
+          {status === 'error' && <span className="text-[9px] text-red-500 font-bold">{error}</span>}
+        </form>
+
+        <AnimatePresence>
+          {status === 'success' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              className="absolute -top-10 left-0 right-0 flex justify-center pointer-events-none z-50"
+            >
+              <div className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-emerald-500/20">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                Subscribed to {regionName}!
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     );
   };
 

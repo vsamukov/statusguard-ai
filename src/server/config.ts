@@ -35,4 +35,4 @@ try {
 export const DASHBOARD_CONFIGS = dashboards;
 
 export const NOC_EMAIL = process.env.NOC_EMAIL;
-export const NOTIFY_THRESHOLD = parseInt(process.env.NOTIFY_THRESHOLD || '0');
+export const NOTIFY_THRESHOLD = parseFloat(process.env.NOTIFY_THRESHOLD || '0');

@@ -13,7 +13,7 @@ import rateLimit from 'express-rate-limit';
 import nodeRoutes from './routes/node.js';
 import hubRoutes from './routes/hub.js';
 import { migrateDb } from './migrate.js';
-import { MODE, IS_HUB, PORT } from './config.js';
+import { MODE, IS_HUB, PORT, NOTIFY_THRESHOLD } from './config.js';
 import { incidentService } from './services/incidentService.js';
 
 const app = express();
@@ -162,11 +162,13 @@ app.get('*', (req, res) => {
       console.log(`[SERVICE] Running on port ${PORT} (MODE=${MODE})`);
     });
 
-    // Background task for NOC notifications (every 10 minutes)
-    if (!IS_HUB) {
+    // Background task for NOC notifications
+    if (!IS_HUB && NOTIFY_THRESHOLD > 0) {
+      // Use NOTIFY_THRESHOLD for interval, but at least every 10 mins if threshold is small
+      const intervalMs = Math.max(10 * 60 * 1000, NOTIFY_THRESHOLD * 60 * 60 * 1000);
       setInterval(() => {
         incidentService.checkOpenIncidentsAndNotifyNOC();
-      }, 10 * 60 * 1000);
+      }, intervalMs);
       // Run once on startup
       incidentService.checkOpenIncidentsAndNotifyNOC();
     }
