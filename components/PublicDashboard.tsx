@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCircle2, Mail, Loader2, AlertCircle } from 'lucide-react';
 import { useApp } from '../store';
 import { Severity, Incident } from '../types';
 import UptimeGraph from './UptimeGraph';
@@ -50,7 +51,7 @@ const PublicDashboard: React.FC = () => {
         await subscribe(email, [regionId]);
         setStatus('success');
         setEmail('');
-        setTimeout(() => setStatus('idle'), 3000);
+        setTimeout(() => setStatus('idle'), 5000);
       } catch (err: any) {
         setStatus('error');
         setError(err.message || 'Failed to subscribe');
@@ -58,37 +59,60 @@ const PublicDashboard: React.FC = () => {
     };
 
     return (
-      <div className="relative">
+      <div className="relative flex items-center">
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <input 
-            type="email" 
-            required
-            placeholder="Email for updates" 
-            className="px-2 py-1 text-[10px] border border-gray-200 rounded outline-none focus:border-indigo-300 transition-colors w-40"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-          />
+          <div className="relative">
+            <Mail className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+            <input 
+              type="email" 
+              required
+              placeholder="Email for updates" 
+              className="pl-7 pr-2 py-1.5 text-[10px] border border-gray-200 rounded-lg outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all w-44"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+          </div>
           <button 
-            disabled={status === 'loading'}
-            className="bg-indigo-600 text-white px-3 py-1 text-[10px] font-bold rounded hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
+            disabled={status === 'loading' || status === 'success'}
+            className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm ${
+              status === 'success' 
+                ? 'bg-emerald-500 text-white cursor-default' 
+                : status === 'error'
+                ? 'bg-red-500 text-white'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95'
+            } disabled:opacity-80`}
           >
-            {status === 'loading' ? '...' : 'Subscribe'}
+            {status === 'loading' ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : status === 'success' ? (
+              <CheckCircle2 className="w-3 h-3" />
+            ) : null}
+            {status === 'loading' ? 'Processing' : status === 'success' ? 'Subscribed' : 'Subscribe'}
           </button>
-          {status === 'error' && <span className="text-[9px] text-red-500 font-bold">{error}</span>}
         </form>
 
         <AnimatePresence>
           {status === 'success' && (
             <motion.div 
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              className="absolute -top-10 left-0 right-0 flex justify-center pointer-events-none z-50"
+              initial={{ opacity: 0, x: 10, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 10, scale: 0.95 }}
+              className="absolute right-full mr-4 pointer-events-none z-50"
             >
-              <div className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-emerald-500/20">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                Subscribed to {regionName}!
+              <div className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 border border-emerald-500/20 whitespace-nowrap">
+                <CheckCircle2 className="w-3 h-3" />
+                Successfully subscribed to {regionName}
               </div>
+            </motion.div>
+          )}
+          {status === 'error' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute top-full mt-1 right-0 text-[9px] text-red-500 font-bold flex items-center gap-1"
+            >
+              <AlertCircle className="w-2.5 h-2.5" />
+              {error}
             </motion.div>
           )}
         </AnimatePresence>
