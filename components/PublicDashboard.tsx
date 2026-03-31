@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../store';
 import { Severity, Incident } from '../types';
 import UptimeGraph from './UptimeGraph';
