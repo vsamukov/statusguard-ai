@@ -2,7 +2,6 @@
 import pool, { withTransaction } from './db.js';
 import { auditService, AuditAction } from './auditService.js';
 import { subscriptionService } from './subscriptionService.js';
-import { NOC_EMAIL, NOTIFY_THRESHOLD } from '../config.js';
 
 export const incidentService = {
   async createIncident(username: string, data: any) {
@@ -136,65 +135,5 @@ export const incidentService = {
         </div>`
       });
     } catch (err) { console.error('[NOTIFY ERROR]', err); }
-  },
-
-  async checkOpenIncidentsAndNotifyNOC() {
-    if (!NOC_EMAIL || !NOTIFY_THRESHOLD) return;
-    const thresholdHours = NOTIFY_THRESHOLD;
-    if (isNaN(thresholdHours) || thresholdHours <= 0) return;
-
-    try {
-      // Find incidents that started more than thresholdHours ago, are still open,
-      // and either haven't been notified to NOC or were last notified more than thresholdHours ago.
-      const query = `
-        SELECT i.*, 
-               (SELECT json_agg(json_build_object('name', c.name, 'region', r.name))
-                FROM incident_affected_components iac
-                JOIN components c ON iac.component_id = c.id
-                JOIN regions r ON c.region_id = r.id
-                WHERE iac.incident_id = i.id) as affected_components
-        FROM incidents i
-        WHERE i.end_time IS NULL
-          AND i.start_time <= NOW() - (INTERVAL '1 hour' * $1)
-          AND (i.last_noc_notified_at IS NULL OR i.last_noc_notified_at <= NOW() - (INTERVAL '1 hour' * $1))
-      `;
-      const openIncidents = await pool.query(query, [thresholdHours]);
-
-      if (openIncidents.rows.length === 0) return;
-
-      for (const incident of openIncidents.rows) {
-        const affectedInfo = (incident.affected_components || [])
-          .map((c: any) => `${c.name} (${c.region})`)
-          .join(', ');
-
-        const subject = `[NOC ALERT] Incident open for >${thresholdHours}h: ${incident.title}`;
-        const html = `
-          <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ef4444; border-radius: 8px;">
-            <h2 style="color: #ef4444;">NOC Alert: Long-standing Incident</h2>
-            <p><strong>Title:</strong> ${incident.title}</p>
-            <p><strong>Severity:</strong> ${incident.severity}</p>
-            <p><strong>Started:</strong> ${new Date(incident.start_time).toLocaleString()}</p>
-            <p><strong>Affected:</strong> ${affectedInfo}</p>
-            <p><strong>Description:</strong> ${incident.description}</p>
-            <hr />
-            <p style="font-size: 12px; color: #666;">This is a repeated alert for an open incident that has exceeded the notification threshold of ${thresholdHours} hours.</p>
-          </div>
-        `;
-
-        await subscriptionService.sendBroadcast({
-          fromEmail: process.env.SMTP_FROM || 'status@voximplant.com',
-          subject,
-          recipients: [NOC_EMAIL],
-          html,
-          includeUnsubscribe: false
-        });
-
-        // Update last_noc_notified_at
-        await pool.query('UPDATE incidents SET last_noc_notified_at = NOW() WHERE id = $1', [incident.id]);
-        console.log(`[NOC NOTIFY] Alert sent for incident ${incident.id}`);
-      }
-    } catch (err) {
-      console.error('[NOC NOTIFY ERROR]', err);
-    }
   }
 };
