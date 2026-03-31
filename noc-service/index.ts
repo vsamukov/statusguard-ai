@@ -79,7 +79,6 @@ async function checkOpenIncidentsAndNotifyNOC() {
       FROM incidents i
       WHERE i.end_time IS NULL
         AND i.start_time <= NOW() - (INTERVAL '1 hour' * $1)
-        AND (i.last_noc_notified_at IS NULL OR i.last_noc_notified_at <= NOW() - (INTERVAL '1 hour' * $1))
     `;
     
     const { rows: openIncidents } = await pool.query(query, [thresholdHours]);
@@ -106,7 +105,7 @@ async function checkOpenIncidentsAndNotifyNOC() {
           <p><strong>Affected:</strong> ${affectedInfo}</p>
           <p><strong>Description:</strong> ${incident.description}</p>
           <hr />
-          <p style="font-size: 12px; color: #666;">This is a repeated alert for an open incident that has exceeded the notification threshold of ${thresholdHours} hours.</p>
+          <p style="font-size: 12px; color: #666;">This is an alert for an open incident that has exceeded the notification threshold of ${thresholdHours} hours.</p>
         </div>
       `;
 
@@ -117,7 +116,6 @@ async function checkOpenIncidentsAndNotifyNOC() {
         html,
       });
 
-      await pool.query('UPDATE incidents SET last_noc_notified_at = NOW() WHERE id = $1', [incident.id]);
       console.log(`[NOC SERVICE] Alert sent for incident ${incident.id}`);
     }
   } catch (err) {
